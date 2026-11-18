@@ -1309,6 +1309,7 @@ impl Render for Launcher {
             .items_center()
             .child(
                 Input::new(&self.input)
+                    .aria_label("Search apps, commands and files")
                     .appearance(false)
                     .bordered(false)
                     .focus_bordered(false)
