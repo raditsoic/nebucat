@@ -106,7 +106,7 @@ fn parse_full(toml: &str) -> Result<Theme, String> {
 }
 
 fn load_table(toml: &str) -> Result<Table, String> {
-    toml.parse::<Table>().map_err(|e| e.to_string())
+    toml.parse::<Table>().map_err(|e| crate::config::toml_error(toml, &e))
 }
 
 fn apply(table: &Table, theme: &mut Theme) -> Result<(), String> {

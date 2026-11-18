@@ -236,4 +236,12 @@ The manifest fields, wire protocol, action types, timeouts and error behavior ar
 
 ## Measured
 
-Pending: filled in after the verification run.
+Measured on 2026-11-18, Windows 11, Intel Arc Graphics, release build:
+
+| Metric | Value |
+| --- | --- |
+| Hotkey to first frame (`show latency` in the log), 10 shows | median 13 ms, range 11 to 17 ms |
+| App index, 241 apps | 4.0 s (debug builds: 2.0 to 5.5 s) |
+| Memory after 60 s hidden | 122.6 MB working set, 78.8 MB private |
+| `nebucat.exe` size | 27.7 MB |
+| First release build from clean | 5 min 25 s |

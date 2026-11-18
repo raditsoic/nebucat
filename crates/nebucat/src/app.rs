@@ -322,8 +322,8 @@ impl Launcher {
             ShellEvent::Show => self.show(window, cx),
             ShellEvent::ReloadIndex => self.reindex(window, cx),
             ShellEvent::OpenConfigFolder => {
-                let dir = paths::config_dir();
-                let _ = shellexec::shell_execute("open", &dir.to_string_lossy(), None);
+                let dir = paths::config_dir().to_string_lossy().to_string();
+                self.shell_call(move || shellexec::shell_execute("open", &dir, None), |_, _, _, _| {}, window, cx);
             }
             ShellEvent::Quit => cx.quit(),
             ShellEvent::HotkeyOk => {
@@ -358,6 +358,9 @@ impl Launcher {
         cx.spawn_in(window, async move |this, cx| {
             window_ctl::show(HWND(hwnd_raw as _), work);
             let _ = this.update_in(cx, |this, window, cx| {
+                // The first activate restores gpui's creation size, so the cached height is stale.
+                this.last_h = -1.;
+                this.resize_to_content(window);
                 this.input.update(cx, |s, cx| s.focus(window, cx));
                 window.on_next_frame(move |_, _| {
                     if let Some(t) = started {
@@ -663,48 +666,84 @@ impl Launcher {
             .map(|(i, _)| i)
     }
 
+    /// ShellExecuteW pumps messages, and the window procedure re-enters gpui, so the call
+    /// runs from a queued task instead of inside the current update.
+    fn shell_call(
+        &mut self,
+        call: impl FnOnce() -> Result<(), i32> + 'static,
+        done: impl FnOnce(&mut Self, Result<(), i32>, &mut Window, &mut Context<Self>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.spawn_in(window, async move |this, cx| {
+            let r = call();
+            let _ = this.update_in(cx, |this, window, cx| done(this, r, window, cx));
+        })
+        .detach();
+    }
+
     fn activate(&mut self, index: usize, secondary: bool, shift: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(row) = self.rows.get(index).cloned() else { return };
         if !row.selectable() {
             return;
         }
         match row.action {
-            RowAction::Launch { id, name } => match apps::launch(&id, secondary && shift) {
-                Ok(()) => {
-                    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-                    self.history.record(&id, now);
-                    apps::save_history(&self.history);
-                    self.hide(window, cx);
-                }
-                Err(code) => self.set_rows(
-                    vec![Row::notice(format!("Couldn't start {name} (error {code})."), RowAction::None)],
+            RowAction::Launch { id, name } => {
+                let admin = secondary && shift;
+                let launch_id = id.clone();
+                self.shell_call(
+                    move || apps::launch(&launch_id, admin),
+                    move |this, r, window, cx| match r {
+                        Ok(()) => {
+                            let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                            this.history.record(&id, now);
+                            apps::save_history(&this.history);
+                            this.hide(window, cx);
+                        }
+                        Err(code) => this.set_rows(
+                            vec![Row::notice(format!("Couldn't start {name} (error {code})."), RowAction::None)],
+                            window,
+                            cx,
+                        ),
+                    },
                     window,
                     cx,
-                ),
-            },
+                );
+            }
             RowAction::RunCommand(cmd) => {
                 if secondary {
-                    let _ = command::open_in_terminal(&cmd);
-                    self.hide(window, cx);
+                    self.shell_call(
+                        move || command::open_in_terminal(&cmd),
+                        |this, _, window, cx| this.hide(window, cx),
+                        window,
+                        cx,
+                    );
                 } else {
                     self.run_command(cmd, window, cx);
                 }
             }
             RowAction::OpenPath(path) => {
                 let p = path.to_string_lossy().to_string();
-                let r = if secondary {
-                    shellexec::shell_execute("open", "explorer.exe", Some(&format!("/select,\"{p}\"")))
-                } else {
-                    shellexec::shell_execute("open", &p, None)
-                };
-                match r {
-                    Ok(()) => self.hide(window, cx),
-                    Err(code) => self.set_rows(
-                        vec![Row::notice(format!("Couldn't open {p} (error {code})."), RowAction::None)],
-                        window,
-                        cx,
-                    ),
-                }
+                let target = p.clone();
+                self.shell_call(
+                    move || {
+                        if secondary {
+                            shellexec::shell_execute("open", "explorer.exe", Some(&format!("/select,\"{target}\"")))
+                        } else {
+                            shellexec::shell_execute("open", &target, None)
+                        }
+                    },
+                    move |this, r, window, cx| match r {
+                        Ok(()) => this.hide(window, cx),
+                        Err(code) => this.set_rows(
+                            vec![Row::notice(format!("Couldn't open {p} (error {code})."), RowAction::None)],
+                            window,
+                            cx,
+                        ),
+                    },
+                    window,
+                    cx,
+                );
             }
             RowAction::OpenUrl(u) => {
                 cx.open_url(&u);
@@ -839,8 +878,13 @@ impl Launcher {
 
     fn open_output_in_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(out) = &self.output {
-            let _ = command::open_in_terminal(&out.cmd);
-            self.hide(window, cx);
+            let cmd = out.cmd.clone();
+            self.shell_call(
+                move || command::open_in_terminal(&cmd),
+                |this, _, window, cx| this.hide(window, cx),
+                window,
+                cx,
+            );
         }
     }
 

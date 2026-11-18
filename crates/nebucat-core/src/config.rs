@@ -81,9 +81,21 @@ impl Config {
 }
 
 pub fn parse(s: &str) -> Result<Config, String> {
-    let mut cfg: Config = toml::from_str(s).map_err(|e| e.to_string())?;
+    let mut cfg: Config = toml::from_str(s).map_err(|e| toml_error(s, &e))?;
     cfg.max_results = cfg.max_results.clamp(1, 9);
     Ok(cfg)
+}
+
+/// One-line `line N: message` form, because errors are shown in a one-line banner.
+pub(crate) fn toml_error(src: &str, e: &toml::de::Error) -> String {
+    let msg = e.message().trim();
+    match e.span() {
+        Some(span) => {
+            let line = src[..span.start.min(src.len())].matches('\n').count() + 1;
+            format!("line {line}: {msg}")
+        }
+        None => msg.to_string(),
+    }
 }
 
 pub const DEFAULT_FILE: &str = r##"# nebucat settings. Saved changes apply without a restart.
@@ -151,8 +163,11 @@ mod tests {
     }
 
     #[test]
-    fn error_has_line() {
-        let e = Config::parse("hotkey = ").unwrap_err();
-        assert!(e.contains('1'), "{e}");
+    fn error_is_one_line_with_line_number() {
+        let e = Config::parse("theme = \"system\"\nhotkey = ").unwrap_err();
+        assert!(e.starts_with("line 2: "), "{e}");
+        assert!(!e.contains('\n'), "{e}");
+        let e = Config::parse("nope = 1").unwrap_err();
+        assert!(e.starts_with("line 1: ") && e.contains("nope"), "{e}");
     }
 }
