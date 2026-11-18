@@ -352,10 +352,12 @@ impl Launcher {
         let Some(hwnd) = self.hwnd else { return };
         let hwnd_raw = hwnd.0 as isize;
         let started = self.shown_at;
+        // gpui's first activate applies its stored initial placement (origin 0,0) on a queued
+        // task; queuing it before ours lets our centering win.
+        window.activate_window();
         cx.spawn_in(window, async move |this, cx| {
             window_ctl::show(HWND(hwnd_raw as _), work);
             let _ = this.update_in(cx, |this, window, cx| {
-                window.activate_window();
                 this.input.update(cx, |s, cx| s.focus(window, cx));
                 window.on_next_frame(move |_, _| {
                     if let Some(t) = started {
