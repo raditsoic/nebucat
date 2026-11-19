@@ -36,6 +36,7 @@ const RESULTS_HINT: &str = "Enter open · Ctrl 1-9 pick · Esc hide";
 const CMD_EMPTY_HINT: &str = "Type a command · Up recalls history · Esc hide";
 const CMD_HINT: &str = "Enter run · Ctrl+Enter in Terminal · Up/Down history · Esc hide";
 const MONO: &str = "Atkinson Hyperlegible Mono";
+const PIXEL: &str = "Departure Mono";
 
 const PLACEHOLDER: &str = "Type an app, > for a command, / for files";
 const EMPTY_HINT: &str =
@@ -68,6 +69,8 @@ pub enum RowIcon {
     None,
     Image(Arc<RenderImage>),
     Path(PathBuf),
+    /// The pixel logo; only the empty-state notice uses it.
+    Logo,
 }
 
 #[derive(Clone)]
@@ -496,7 +499,7 @@ impl Launcher {
                         .map(|a| self.app_row(a, Vec::new()))
                         .collect();
                     if rows.is_empty() {
-                        vec![Row::notice(EMPTY_HINT, RowAction::None)]
+                        vec![Row { icon: RowIcon::Logo, ..Row::notice(EMPTY_HINT, RowAction::None) }]
                     } else {
                         rows
                     }
@@ -1206,10 +1209,11 @@ impl Launcher {
             .px(px(12.))
             .flex()
             .items_center()
-            .gap(px(12.))
-            .rounded(px(2.));
+            .gap(px(12.));
 
-        if row.source != Source::Notice {
+        if matches!(row.icon, RowIcon::Logo) {
+            el = el.child(crate::logo::element());
+        } else if row.source != Source::Notice {
             // Fixed slot keeps titles aligned and stops layout shift when icons arrive.
             let slot = div().size(px(24.)).flex_none().flex().items_center().justify_center();
             let slot = match (&row.icon, &row.source) {
@@ -1241,7 +1245,7 @@ impl Launcher {
             el = el.child(
                 div()
                     .flex_none()
-                    .font_family(MONO)
+                    .font_family(PIXEL)
                     .text_size(px(11.))
                     .text_color(hsla(t.muted))
                     .child(meta.clone()),
@@ -1251,7 +1255,7 @@ impl Launcher {
             el = el.child(
                 div()
                     .flex_none()
-                    .font_family(MONO)
+                    .font_family(PIXEL)
                     .text_size(px(11.))
                     .text_color(hsla(accent))
                     .child(label),
@@ -1264,7 +1268,7 @@ impl Launcher {
                     .w(px(44.))
                     .flex()
                     .justify_end()
-                    .font_family(MONO)
+                    .font_family(PIXEL)
                     .text_size(px(11.))
                     .text_color(hsla(t.muted))
                     .child(format!("Ctrl {n}")),
@@ -1352,7 +1356,7 @@ impl Launcher {
             .items_center()
             .justify_between()
             .gap(px(12.))
-            .font_family(MONO)
+            .font_family(PIXEL)
             .text_size(px(11.))
             .text_color(hsla(t.muted))
             .child(
@@ -1422,7 +1426,7 @@ impl Render for Launcher {
                     .border_t_1()
                     .border_color(hsla(t.border))
                     .child(
-                        div().flex_none().font_family(MONO).text_size(px(11.)).text_color(hsla(t.muted)).child(label),
+                        div().flex_none().font_family(PIXEL).text_size(px(11.)).text_color(hsla(t.muted)).child(label),
                     )
                     .child(
                         div()
@@ -1464,7 +1468,7 @@ impl Render for Launcher {
                         .flex()
                         .items_center()
                         .justify_end()
-                        .font_family(MONO)
+                        .font_family(PIXEL)
                         .text_size(px(11.))
                         .text_color(hsla(t.muted))
                         .child(hint),

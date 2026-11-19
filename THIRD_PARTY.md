@@ -32,6 +32,8 @@ Source: the license header of `Everything.h` in https://www.voidtools.com/Everyt
 
 Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono, embedded in the executable. SIL Open Font License 1.1. License texts: `assets/fonts/OFL.txt` and `assets/fonts/OFL-Mono.txt`, also included in release zips.
 
+Departure Mono 1.500 by Helena Zhang, embedded in the executable. SIL Open Font License 1.1. License text: `assets/fonts/OFL-DepartureMono.txt`, also included in release zips. Source: https://github.com/rektdeckard/departure-mono
+
 ## Rust crates
 
 Licenses as declared in each crate's manifest (`cargo metadata`, Cargo.lock at release time). The list covers every crate in the lockfile, including ones used only on other platforms. License texts and copyright notices are in each crate's source.

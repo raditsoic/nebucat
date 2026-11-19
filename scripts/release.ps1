@@ -38,7 +38,7 @@ Copy-Item (Join-Path $dist 'sdk\dll\Everything64.dll') $stage
 
 Copy-Item 'target\release\nebucat.exe' $stage
 Copy-Item 'LICENSE', 'THIRD_PARTY.md', 'README.md', 'CHANGELOG.md' $stage
-Copy-Item 'assets\fonts\OFL.txt', 'assets\fonts\OFL-Mono.txt' $stage
+Copy-Item 'assets\fonts\OFL.txt', 'assets\fonts\OFL-Mono.txt', 'assets\fonts\OFL-DepartureMono.txt' $stage
 Copy-Item 'examples\plugins\hello' (Join-Path $stage 'examples\plugins\hello') -Recurse
 
 $zip = Join-Path $dist "$name.zip"

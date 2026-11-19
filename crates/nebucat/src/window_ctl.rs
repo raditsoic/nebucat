@@ -1,6 +1,6 @@
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{
-    DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
+    DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute,
 };
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
@@ -24,8 +24,8 @@ pub fn apply_frame(hwnd: HWND, border_rgb: u32) {
         let _ = DwmSetWindowAttribute(
             hwnd,
             DWMWA_WINDOW_CORNER_PREFERENCE,
-            &DWMWCP_ROUND as *const _ as _,
-            std::mem::size_of_val(&DWMWCP_ROUND) as u32,
+            &DWMWCP_DONOTROUND as *const _ as _,
+            std::mem::size_of_val(&DWMWCP_DONOTROUND) as u32,
         );
         let _ = DwmSetWindowAttribute(
             hwnd,

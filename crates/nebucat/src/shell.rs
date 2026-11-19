@@ -18,7 +18,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const HOTKEY_ID: i32 = 1;
 const WM_REREGISTER: u32 = WM_APP + 1;
 const WM_QUIT_SHELL: u32 = WM_APP + 2;
-static ICON_RGBA: &[u8] = include_bytes!("../../../assets/icon/nebucat-32.rgba");
 
 #[derive(Debug, Clone)]
 pub enum ShellEvent {
@@ -139,7 +138,8 @@ fn run(
             let _ = tray_tx.send_blocking(ShellEvent::Show);
         }
     }));
-    let tray = Icon::from_rgba(ICON_RGBA.to_vec(), 32, 32)
+    let side = crate::logo::SIZE as u32;
+    let tray = Icon::from_rgba(crate::logo::RGBA.to_vec(), side, side)
         .map_err(|e| e.to_string())
         .and_then(|icon| {
             TrayIconBuilder::new()

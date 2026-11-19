@@ -3,6 +3,7 @@
 ## Unreleased
 
 - New logo: a pixel-art cat planet with a pink ring, replacing the placeholder "n" icon.
+- Pixel accents: square window corners and rows, Departure Mono for the 11px labels, hints and footers, and the pixel logo in the empty state.
 
 ## 0.1.0
 
@@ -15,4 +16,4 @@ First release.
 - Plugins over newline-delimited JSON on stdio.
 - Themes and `config.toml`, applied live. Dark and light themes follow Windows.
 
-Known limits: the executable is unsigned, so Windows SmartScreen warns on first run. The icon is a placeholder.
+Known limits: the executable is unsigned, so Windows SmartScreen warns on first run.

@@ -64,6 +64,7 @@ Reason: programs print with standard ANSI colors, and the stock terminal values 
 
 - **R-01:** a purple accent on a near-black base is kept. Reason: the brand name nebucat comes from nebula. The accent stays flat: no gradients, glow or starfield.
 - **R-29:** three accent tones are kept. Reason: each marks one result source, and a text label carries the same information, so color is never the only cue.
+- **Pixel accents:** the chrome echoes the pixel-art logo in square corners, the 11px labels and the empty state. Reason: the logo sets a pixel identity, and short fixed text carries it without costing legibility where the user scans names.
 
 ## Accents color text only
 
@@ -72,9 +73,10 @@ Accents color matched letters, the prompt glyph, source labels and the exit code
 ## Typography
 
 - **UI font:** Atkinson Hyperlegible Next. Reason: its letterforms keep near-identical app names distinguishable when scanning fast.
-- **Mono font:** Atkinson Hyperlegible Mono, for command output, source labels and shortcut hints. Reason: same letterform family, so output and UI read as one voice.
+- **Mono font:** Atkinson Hyperlegible Mono, for command output and the calculator `=` glyph. Reason: same letterform family, so output and UI read as one voice.
+- **Pixel font:** Departure Mono, for every 11px text: source labels, shortcut hints, file size and age, banner labels and both footers. Reason: it carries the logo's pixel identity in short, fixed strings, while titles, paths and output stay in Atkinson for scanning. It is drawn on an 11px grid, so it is crisp at 100% and 200% display scaling; at 125% and 150% its edges soften.
 - **Query size:** 16px, not 22px. Reason: the query is typed text and should not dominate the window. It stays in Next because Mono letterforms are wide and space the typed text too far apart.
-- Fonts are bundled from `assets/fonts/` under the SIL Open Font License (`assets/fonts/OFL.txt`). Reason: the launcher must look the same on a machine without them installed.
+- Fonts are bundled from `assets/fonts/` under the SIL Open Font License (`assets/fonts/OFL.txt`, `OFL-Mono.txt`, `OFL-DepartureMono.txt`). Reason: the launcher must look the same on a machine without them installed.
 
 | Element | Font | Size | Weight |
 |---|---|---|---|
@@ -82,15 +84,15 @@ Accents color matched letters, the prompt glyph, source labels and the exit code
 | Row title | Next | 14px | Regular |
 | Matched letters in a title | Next | 14px | SemiBold 600 |
 | Subtitle | Next | 12px | Regular |
-| Source labels and shortcut hints | Mono | 11px | Regular |
+| Source labels, shortcut hints, file size and age, banner labels, footers | Pixel | 11px | Regular |
 | Command output | Mono | 13px, 20px line height | Regular |
 
 Reason for SemiBold matches: weight plus accent color marks the match, so it still reads for users who cannot see the hue.
 
 ## Shape
 
-- **Window corners:** Windows 11 DWM round (`DWMWCP_ROUND`). Reason: matches every other window on the desktop without drawing custom corners.
-- **Row radius:** 2px. No pill shapes. Reason: sharp corners match a terminal's grid and the dev-tool direction; rows are list items, not buttons.
+- **Window corners:** square (`DWMWCP_DONOTROUND`), with the DWM border and shadow kept. Reason: square corners match the pixel logo; stepped pixel corners would need a custom-drawn transparent window and would lose the DWM shadow.
+- **Row radius:** 0. No pill shapes. Reason: square rows match the pixel accents and a terminal's grid; rows are list items, not buttons.
 - **Row layout:** one line, 36px tall: icon, title, subtitle, file size and age, source label, shortcut hint. Title and subtitle are two equal columns, and the subtitle is muted and cut with an ellipsis. Reason: more results fit, and the path sits beside the name instead of under it.
 - **Spacing scale:** 4, 8, 12, 16, 20, 24. Reason: one scale keeps every gap on the same rhythm (RHYTHM 1).
 - **Shadow:** only the DWM window shadow. Reason: the launcher floats above other apps; rows sit flat.
@@ -101,7 +103,7 @@ The default is `system`: nebucat follows the Windows app theme, and switches liv
 
 ## Identity motif
 
-Each row ends in a right-aligned column. It holds the source label (`App`, `File`, plugin name, `Calc`, `Web`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Mono. Notice rows have no label and no hint. Command mode shows no result row: Enter runs the typed command, so a row would only repeat the query.
+Each row ends in a right-aligned column. It holds the source label (`App`, `File`, plugin name, `Calc`, `Web`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Pixel. Notice rows have no label and no hint. Command mode shows no result row: Enter runs the typed command, so a row would only repeat the query.
 
 | Label | Accent |
 |---|---|
@@ -110,11 +112,11 @@ Each row ends in a right-aligned column. It holds the source label (`App`, `File
 
 Reason: the label tells the user where a result came from in text, and the hint teaches the fastest way to pick it.
 
-File rows show size and age (`12.4K  3d`) in muted Mono 11, in the label column before the source label. Reason: the size and age show at a glance, like `ls -lh`. Age is relative, so it needs no timezone.
+File rows show size and age (`12.4K  3d`) in muted Pixel 11, in the label column before the source label. Reason: the size and age show at a glance, like `ls -lh`. Age is relative, so it needs no timezone.
 
 ### Results footer
 
-Shown under the results when at least one row is selectable, and always in command mode, where there are no rows. Right-aligned, muted Mono 11. Results: `Enter open · Ctrl 1-9 pick · Esc hide`. Command mode copy is in the Command mode section. Reason: a status line keeps the key hints visible without a help screen, and in command mode it replaces the row that only repeated the query.
+Shown under the results when at least one row is selectable, and always in command mode, where there are no rows. Right-aligned, muted Pixel 11. Results: `Enter open · Ctrl 1-9 pick · Esc hide`. Command mode copy is in the Command mode section. Reason: a status line keeps the key hints visible without a help screen, and in command mode it replaces the row that only repeated the query.
 
 ## Motion (MOTION 2)
 
@@ -131,6 +133,8 @@ A 32×32 pixel-art cat whose round head is a planet with a pink ring, on a `#151
 
 Rows show only real app and file icons from the Windows shell, in a reserved 24×24 slot. No icon library glyphs. Reason: R-04. gpui-kit bundles Lucide icons; do not use them in result rows. The slot is reserved even before an icon loads, so rows do not shift.
 
+The one exception is the empty-state notice, which shows the pixel logo at 32×32 before its text. It is not a result, so R-04 does not apply. Its cells are snapped to whole device pixels, so it stays sharp at any display scale. Reason: the first thing a new user sees carries the brand.
+
 ## State copy
 
 These strings are exact. Placeholders in angle brackets are filled at runtime. Change a string here first, then in code.
@@ -142,7 +146,7 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 
 ### Apps
 
-- Empty query, no history: `Type an app name. Start with > to run a command or / to search files.`
+- Empty query, no history: `Type an app name. Start with > to run a command or / to search files.`, with the pixel logo before it.
 - Index not ready: `Indexing apps…`
 - Index failed (action: rebuild the index): `Couldn't read the Apps folder: <error>. Press Ctrl+R to retry.`
 - No match: `No apps match "<q>". Start with > to run it as a command.` The web row follows it when the web fallback is enabled.
@@ -187,7 +191,7 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 
 ### Config, theme and hotkey banners
 
-The banner is a 36px row above the results. A muted Mono 11 label (`Config`, `Hotkey`, `Theme` or `Plugin`) comes first, then the message in `text`. The banner stays until its cause is fixed.
+The banner is a 36px row above the results. A muted Pixel 11 label (`Config`, `Hotkey`, `Theme` or `Plugin`) comes first, then the message in `text`. The banner stays until its cause is fixed.
 
 - Config invalid at startup: `config.toml: <error>. Using defaults.`
 - Config invalid on reload: `config.toml: <error>. Using previous settings.`

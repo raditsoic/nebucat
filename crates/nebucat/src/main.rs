@@ -19,6 +19,8 @@ mod files;
 #[cfg(windows)]
 mod icons;
 #[cfg(windows)]
+mod logo;
+#[cfg(windows)]
 mod plugins;
 #[cfg(windows)]
 mod shellexec;
@@ -66,6 +68,7 @@ fn main() {
                     Cow::Borrowed(include_bytes!("../../../assets/fonts/AtkinsonHyperlegibleNext-SemiBold.ttf").as_slice()),
                     Cow::Borrowed(include_bytes!("../../../assets/fonts/AtkinsonHyperlegibleMono-Regular.ttf").as_slice()),
                     Cow::Borrowed(include_bytes!("../../../assets/fonts/AtkinsonHyperlegibleMono-SemiBold.ttf").as_slice()),
+                    Cow::Borrowed(include_bytes!("../../../assets/fonts/DepartureMono-Regular.otf").as_slice()),
                 ])
                 .expect("register fonts");
             gpui_kit::init(cx);

@@ -39,7 +39,7 @@ crates/
       plugins.rs           plugin discovery, processes, protocol
       ui/theme.rs          applies core Theme to gpui-kit, ActiveTheme global
 themes/                    nebula-dark.toml, nebula-light.toml (built-ins, include_str!)
-assets/fonts/              Atkinson Hyperlegible Next and Mono, OFL.txt
+assets/fonts/              Atkinson Hyperlegible Next and Mono, Departure Mono, OFL texts
 assets/icon/               generated icon (ico, png, raw rgba)
 assets/logo/nebucat.svg    generated pixel-art logo
 tools/make_icon.py         holds the logo pixel grid, generates assets/logo and assets/icon (python3, stdlib only)

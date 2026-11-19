@@ -64,7 +64,7 @@ Everything is separate software with its own license. nebucat does not bundle it
 
 ### SmartScreen
 
-`nebucat.exe` is not code-signed, so Windows SmartScreen warns the first time you run it. Choose `More info`, then `Run anyway`. The icon is a placeholder.
+`nebucat.exe` is not code-signed, so Windows SmartScreen warns the first time you run it. Choose `More info`, then `Run anyway`.
 
 ## Build from source
 
@@ -266,7 +266,7 @@ The manifest fields, wire protocol, action types, timeouts and error behavior ar
 
 nebucat is released under the [MIT License](LICENSE). The copyright notice is in that file.
 
-Third-party components, including the Atkinson Hyperlegible fonts (SIL Open Font License 1.1; texts in `assets/fonts/OFL.txt` and `assets/fonts/OFL-Mono.txt`) and the Everything SDK DLL (MIT), are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+Third-party components, including the Atkinson Hyperlegible fonts (SIL Open Font License 1.1; texts in `assets/fonts/OFL.txt` and `assets/fonts/OFL-Mono.txt`), the Departure Mono font (SIL Open Font License 1.1; text in `assets/fonts/OFL-DepartureMono.txt`) and the Everything SDK DLL (MIT), are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Everything, the search application, is separate software with its own license. nebucat does not bundle it.
 
