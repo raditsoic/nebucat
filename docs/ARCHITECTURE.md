@@ -118,11 +118,13 @@ The window is a gpui `PopUp` (no taskbar button) opened hidden at startup. `show
 
 ### App index thread (`apps.rs`)
 
-Spawned per index run: at startup, on `Ctrl+R` or the tray item, and on show when the index is older than 5 minutes. It initializes COM as STA, enumerates `FOLDERID_AppsFolder` through `IEnumShellItems`, reads display names, parsing names and 48 px icons, and sends one result over a `bounded(1)` `async_channel`. The old index keeps serving until the new one arrives. This one source covers Start menu desktop apps and Store apps. Launch is `ShellExecuteW("open" or "runas", "shell:AppsFolder\<id>")`.
+Spawned per index run: at startup, on `Ctrl+R` or the tray item, and on show when the index is older than 5 minutes. It initializes COM as STA, enumerates `FOLDERID_AppsFolder` through `IEnumShellItems`, reads display names, parsing names and 48 px icons, and sends one result over a `bounded(1)` `async_channel`. The 5 minute run reuses icons from the previous index by app id and extracts only new ones; `Ctrl+R` and the tray item extract all of them again. The old index keeps serving until the new one arrives. This one source covers Start menu desktop apps and Store apps. Launch is `ShellExecuteW("open" or "runas", "shell:AppsFolder\<id>")`.
+
+gpui keeps every painted `RenderImage` in the window's sprite atlas until `drop_image`, even after the last `Arc` is dropped. When rows or the app index are replaced, `release_icons` in `app.rs` drops each outgoing icon that nothing else holds.
 
 ### Everything thread (`files.rs`)
 
-One long-lived thread named `everything` owns `Everything64.dll`, because the Everything SDK keeps global state and is not thread-safe. It loads the DLL lazily from the exe's folder with `libloading`. Requests arrive on an unbounded `async_channel`. Before each search the thread drains the queue and keeps only the newest request; older requests get no reply. Each reply goes back on a per-request `bounded(1)` channel. The thread initializes COM as STA for file icons.
+One long-lived thread named `everything` owns `Everything64.dll`, because the Everything SDK keeps global state and is not thread-safe. It loads the DLL lazily from the exe's folder with `libloading`. Requests arrive on an unbounded `async_channel`. Before each search the thread drains the queue and keeps only the newest request; older requests get no reply. Each reply goes back on a per-request `bounded(1)` channel. The thread initializes COM as STA for file icons. Size and date modified come from Everything's index, not the file system. File icons are cached by extension for the life of the thread; folders and types with per-file icons (`exe`, `lnk`, `ico` and similar) are extracted per result.
 
 ### Command threads (`command.rs`)
 

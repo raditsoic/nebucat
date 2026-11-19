@@ -4,6 +4,9 @@
 
 - New logo: a pixel-art cat planet with a pink ring, replacing the placeholder "n" icon.
 - Pixel accents: square window corners and rows, Departure Mono for the 11px labels, hints and footers, and the pixel logo in the empty state.
+- Icons that leave the result list are freed from the GPU sprite atlas. Before, every file search and app reindex left its icons behind, so memory grew over the session.
+- `/` file search shares one icon per file type instead of extracting one per result, and reads size and date from Everything instead of touching each file on disk.
+- The periodic app reindex keeps existing icons. Ctrl+R and the tray's reload still refresh them.
 
 ## 0.1.0
 

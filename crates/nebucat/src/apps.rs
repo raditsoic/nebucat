@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -24,7 +25,10 @@ pub struct AppEntry {
     pub icon: Option<Arc<RenderImage>>,
 }
 
-pub fn spawn_index() -> async_channel::Receiver<Result<Vec<AppEntry>, String>> {
+/// `reuse` maps app ids to icons from the previous index; those apps skip icon extraction.
+pub fn spawn_index(
+    reuse: HashMap<String, Arc<RenderImage>>,
+) -> async_channel::Receiver<Result<Vec<AppEntry>, String>> {
     let (tx, rx) = async_channel::bounded(1);
     let thread_tx = tx.clone();
     let spawned = std::thread::Builder::new()
@@ -34,7 +38,7 @@ pub fn spawn_index() -> async_channel::Receiver<Result<Vec<AppEntry>, String>> {
             let result = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
                 .ok()
                 .and_then(|()| {
-                    let apps = enumerate();
+                    let apps = enumerate(&reuse);
                     unsafe { CoUninitialize() };
                     apps
                 })
@@ -56,7 +60,7 @@ pub fn spawn_index() -> async_channel::Receiver<Result<Vec<AppEntry>, String>> {
     rx
 }
 
-fn enumerate() -> windows::core::Result<Vec<AppEntry>> {
+fn enumerate(reuse: &HashMap<String, Arc<RenderImage>>) -> windows::core::Result<Vec<AppEntry>> {
     let folder: IShellItem =
         unsafe { SHGetKnownFolderItem(&FOLDERID_AppsFolder, KF_FLAG_DEFAULT, None) }?;
     let items: IEnumShellItems = unsafe { folder.BindToHandler(None, &BHID_EnumItems) }?;
@@ -79,7 +83,10 @@ fn enumerate() -> windows::core::Result<Vec<AppEntry>> {
         if name.is_empty() || id.is_empty() {
             continue;
         }
-        let icon = icons::from_shell_item(&item, ICON_SIZE);
+        let icon = match reuse.get(&id) {
+            Some(icon) => Some(icon.clone()),
+            None => icons::from_shell_item(&item, ICON_SIZE),
+        };
         apps.push(AppEntry { name, id, icon });
     }
     apps.sort_by(|a, b| {

@@ -1,15 +1,26 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use gpui_kit::RenderImage;
 use libloading::Library;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 
 const REQUEST_FILE_NAME: u32 = 0x1;
 const REQUEST_PATH: u32 = 0x2;
+const REQUEST_SIZE: u32 = 0x10;
+const REQUEST_DATE_MODIFIED: u32 = 0x40;
 const ERROR_IPC: u32 = 2;
 const PATH_BUF_LEN: usize = 32768;
 const ICON_SIZE: i32 = 48;
+/// FILETIME ticks (100 ns) between 1601-01-01 and 1970-01-01.
+const FILETIME_UNIX_OFFSET: u64 = 116_444_736_000_000_000;
+/// Types whose shell icon comes from the file itself rather than from its extension.
+const PER_FILE_ICON: [&str; 10] = ["exe", "lnk", "ico", "url", "cur", "ani", "scr", "cpl", "msc", "appref-ms"];
+
+/// Icons keyed by lowercase extension, shared across queries so rows reuse one atlas tile.
+type IconCache = HashMap<String, Option<Arc<RenderImage>>>;
 
 #[derive(Clone)]
 pub struct FileHit {
@@ -18,7 +29,7 @@ pub struct FileHit {
     pub parent: String,
     pub size: Option<u64>,
     pub modified: Option<SystemTime>,
-    pub icon: Option<Arc<gpui_kit::RenderImage>>,
+    pub icon: Option<Arc<RenderImage>>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +78,9 @@ struct Everything {
     get_last_error: unsafe extern "system" fn() -> u32,
     get_num_results: unsafe extern "system" fn() -> u32,
     get_full_path: unsafe extern "system" fn(u32, *mut u16, u32) -> u32,
+    get_size: unsafe extern "system" fn(u32, *mut i64) -> i32,
+    get_date_modified: unsafe extern "system" fn(u32, *mut u64) -> i32,
+    is_folder: unsafe extern "system" fn(u32) -> i32,
     // Keeps the fn pointers above valid.
     _lib: Library,
 }
@@ -103,16 +117,25 @@ impl Everything {
                 get_last_error: sym(&lib, b"Everything_GetLastError\0")?,
                 get_num_results: sym(&lib, b"Everything_GetNumResults\0")?,
                 get_full_path: sym(&lib, b"Everything_GetResultFullPathNameW\0")?,
+                get_size: sym(&lib, b"Everything_GetResultSize\0")?,
+                get_date_modified: sym(&lib, b"Everything_GetResultDateModified\0")?,
+                is_folder: sym(&lib, b"Everything_IsFolderResult\0")?,
                 _lib: lib,
             })
         }
     }
 
-    fn search(&self, query: &str, max: u32, buf: &mut [u16]) -> Result<Vec<FileHit>, FilesError> {
+    fn search(
+        &self,
+        query: &str,
+        max: u32,
+        buf: &mut [u16],
+        icons: &mut IconCache,
+    ) -> Result<Vec<FileHit>, FilesError> {
         let wide: Vec<u16> = query.encode_utf16().chain(std::iter::once(0)).collect();
         unsafe {
             (self.set_search)(wide.as_ptr());
-            (self.set_request_flags)(REQUEST_FILE_NAME | REQUEST_PATH);
+            (self.set_request_flags)(REQUEST_FILE_NAME | REQUEST_PATH | REQUEST_SIZE | REQUEST_DATE_MODIFIED);
             (self.set_max)(max);
             if (self.query)(1) == 0 {
                 let code = (self.get_last_error)();
@@ -138,10 +161,20 @@ impl Everything {
                     .parent()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                let icon = crate::icons::for_path(&path, ICON_SIZE);
-                let meta = std::fs::metadata(&path).ok();
-                let size = meta.as_ref().map(|m| m.len());
-                let modified = meta.and_then(|m| m.modified().ok());
+                let icon = match icon_key(&name, (self.is_folder)(i) != 0) {
+                    Some(key) => icons
+                        .entry(key)
+                        .or_insert_with(|| crate::icons::for_path(&path, ICON_SIZE))
+                        .clone(),
+                    None => crate::icons::for_path(&path, ICON_SIZE),
+                };
+                let mut raw_size = -1i64;
+                // Everything reports -1 for sizes it has not indexed, such as most folders.
+                let size = ((self.get_size)(i, &mut raw_size) != 0 && raw_size >= 0).then_some(raw_size as u64);
+                let mut ft = 0u64;
+                let modified = ((self.get_date_modified)(i, &mut ft) != 0)
+                    .then(|| filetime_to_system(ft))
+                    .flatten();
                 hits.push(FileHit {
                     path,
                     name,
@@ -156,6 +189,24 @@ impl Everything {
     }
 }
 
+/// None means the icon is specific to this path and must not be shared.
+fn icon_key(name: &str, is_folder: bool) -> Option<String> {
+    if is_folder {
+        return None;
+    }
+    let ext = name.rsplit_once('.').map_or(String::new(), |(_, e)| e.to_ascii_lowercase());
+    (!PER_FILE_ICON.contains(&ext.as_str())).then_some(ext)
+}
+
+fn filetime_to_system(ft: u64) -> Option<SystemTime> {
+    // Everything uses all ones for an unknown date.
+    if ft == u64::MAX {
+        return None;
+    }
+    let ticks = ft.checked_sub(FILETIME_UNIX_OFFSET)?;
+    Some(UNIX_EPOCH + Duration::from_secs(ticks / 10_000_000) + Duration::from_nanos(ticks % 10_000_000 * 100))
+}
+
 fn run(rx: async_channel::Receiver<Req>) {
     // STA for IShellItemImageFactory icons.
     let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
@@ -164,6 +215,7 @@ fn run(rx: async_channel::Receiver<Req>) {
     }
     let mut everything: Option<Everything> = None;
     let mut buf = vec![0u16; PATH_BUF_LEN];
+    let mut icons = IconCache::new();
     while let Ok(mut req) = rx.recv_blocking() {
         // Only the newest queued request matters; stale replies close unanswered.
         while let Ok(newer) = rx.try_recv() {
@@ -183,7 +235,7 @@ fn run(rx: async_channel::Receiver<Req>) {
             }
         }
         let Some(e) = everything.as_ref() else { continue };
-        let result = e.search(&req.query, req.max, &mut buf);
+        let result = e.search(&req.query, req.max, &mut buf, &mut icons);
         let _ = req.reply.try_send(result);
     }
 }

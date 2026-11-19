@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -304,7 +305,7 @@ impl Launcher {
         };
         this.apply_theme(window, cx);
         this.plugin_banners = this.plugins.discover(&paths::config_dir().join("plugins"));
-        this.reindex(window, cx);
+        this.reindex(false, window, cx);
         this.watch_config(window, cx);
         this.refresh(window, cx);
         this
@@ -340,7 +341,7 @@ impl Launcher {
                 }
             }
             ShellEvent::Show => self.show(window, cx),
-            ShellEvent::ReloadIndex => self.reindex(window, cx),
+            ShellEvent::ReloadIndex => self.reindex(false, window, cx),
             ShellEvent::OpenConfigFolder => {
                 let dir = paths::config_dir().to_string_lossy().to_string();
                 self.shell_call(move || shellexec::shell_execute("open", &dir, None), |_, _, _, _| {}, window, cx);
@@ -361,7 +362,7 @@ impl Launcher {
         self.shown_at = Some(Instant::now());
         self.animations = window_ctl::animations_enabled();
         if self.indexed_at.is_some_and(|t| t.elapsed() > INDEX_MAX_AGE) {
-            self.reindex(window, cx);
+            self.reindex(true, window, cx);
         }
         self.refresh(window, cx);
         self.resize_to_content(window);
@@ -405,17 +406,24 @@ impl Launcher {
         self.refresh(window, cx);
     }
 
-    fn reindex(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// `reuse_icons` keeps icons of apps already indexed; manual reloads pass false to refresh them.
+    fn reindex(&mut self, reuse_icons: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.apps.is_empty() {
             self.index_state = IndexState::Indexing;
         }
-        let rx = apps::spawn_index();
+        let reuse = if reuse_icons {
+            self.apps.iter().filter_map(|a| Some((a.id.clone(), a.icon.clone()?))).collect()
+        } else {
+            HashMap::new()
+        };
+        let rx = apps::spawn_index(reuse);
         self.index_task = Some(cx.spawn_in(window, async move |this, cx| {
             let Ok(result) = rx.recv().await else { return };
             let _ = this.update_in(cx, |this, window, cx| {
                 match result {
                     Ok(list) => {
-                        this.apps = list;
+                        let old = std::mem::replace(&mut this.apps, list);
+                        release_icons(old.into_iter().filter_map(|a| a.icon), window, cx);
                         this.index_state = IndexState::Ready;
                     }
                     Err(e) => {
@@ -466,7 +474,15 @@ impl Launcher {
     }
 
     fn set_rows(&mut self, rows: Vec<Row>, window: &mut Window, cx: &mut Context<Self>) {
-        self.rows = rows;
+        let old = std::mem::replace(&mut self.rows, rows);
+        release_icons(
+            old.into_iter().filter_map(|r| match r.icon {
+                RowIcon::Image(i) => Some(i),
+                _ => None,
+            }),
+            window,
+            cx,
+        );
         self.selected = self.rows.iter().position(Row::selectable).unwrap_or(0);
         self.resize_to_content(window);
         cx.notify();
@@ -781,7 +797,7 @@ impl Launcher {
             }
             RowAction::Reindex => {
                 self.index_state = IndexState::Indexing;
-                self.reindex(window, cx);
+                self.reindex(false, window, cx);
                 self.refresh(window, cx);
             }
             RowAction::None => {}
@@ -1013,7 +1029,7 @@ impl Launcher {
             }
             ("r", true, false, false) => {
                 self.index_state = IndexState::Indexing;
-                self.reindex(window, cx);
+                self.reindex(false, window, cx);
                 self.refresh(window, cx);
                 true
             }
@@ -1510,6 +1526,16 @@ fn index_failed(e: &str) -> Row {
         format!("Couldn't read the Apps folder: {e}. Press Ctrl+R to retry."),
         RowAction::Reindex,
     )
+}
+
+/// gpui keeps an image in the sprite atlas until drop_image, even after the last Arc is gone.
+/// Icons still shared elsewhere (app index, file icon cache, current rows) stay resident.
+fn release_icons(icons: impl Iterator<Item = Arc<RenderImage>>, window: &mut Window, cx: &mut App) {
+    for icon in icons {
+        if Arc::strong_count(&icon) == 1 {
+            cx.drop_image(icon, Some(window));
+        }
+    }
 }
 
 fn file_row(q: &str, hit: FileHit) -> Row {
