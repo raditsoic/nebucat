@@ -88,7 +88,7 @@ Owns the `Launcher` entity, the window and every piece of UI state. Other thread
 
 A plain `std::thread` named `shell`, started before the window opens.
 
-- Registers the global hotkey with `RegisterHotKey(None, 1, mods | MOD_NOREPEAT, vk)`. It sends `HotkeyOk`, or `HotkeyError("<hotkey> is taken by another app. Change hotkey in config.toml.")`.
+- Registers the global hotkey with `RegisterHotKey(None, 1, mods | MOD_NOREPEAT, vk)`. It sends `HotkeyOk`, or `HotkeyError("<hotkey> is taken by another app. Change hotkey in config.toml.")`. A modifier-only hotkey (`Win`) installs a `WH_KEYBOARD_LL` hook instead. The hook posts `WM_APP + 3` when the modifier is released with no other key pressed in between. For Win and Alt it first injects an unassigned key (`0xE8`) so Windows does not open Start or the menu bar. Injected input is ignored by the hook.
 - Builds the tray icon with the menu `Show nebucat`, `Open config folder`, `Rebuild app index`, `Quit`. A left click sends `Show`.
 - Loops on `MsgWaitForMultipleObjects` over the show event plus its message queue. The show event sends `Show`. `WM_HOTKEY` sends `Toggle`. Other messages go through `TranslateMessage` and `DispatchMessageW`, which tray-icon needs.
 

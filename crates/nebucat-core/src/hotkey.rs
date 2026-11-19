@@ -1,3 +1,4 @@
+/// `vk == 0` means a lone modifier (e.g. "Win") that fires when tapped on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Hotkey {
     pub ctrl: bool,
@@ -5,6 +6,12 @@ pub struct Hotkey {
     pub shift: bool,
     pub win: bool,
     pub vk: u32,
+}
+
+impl Hotkey {
+    pub fn is_modifier_only(&self) -> bool {
+        self.vk == 0
+    }
 }
 
 pub fn parse(s: &str) -> Result<Hotkey, String> {
@@ -36,9 +43,14 @@ pub fn parse(s: &str) -> Result<Hotkey, String> {
         }
         key = Some(vk);
     }
-    hk.vk = key.ok_or_else(|| err("missing a key".into()))?;
-    if !(hk.ctrl || hk.alt || hk.shift || hk.win) {
-        return Err(err("needs at least one of Ctrl, Alt, Shift, Win".into()));
+    match key {
+        Some(vk) => hk.vk = vk,
+        None => {
+            let count = [hk.ctrl, hk.alt, hk.shift, hk.win].iter().filter(|m| **m).count();
+            if count != 1 {
+                return Err(err("missing a key".into()));
+            }
+        }
     }
     Ok(hk)
 }
@@ -71,9 +83,19 @@ mod tests {
     }
 
     #[test]
-    fn bare_key_errors() {
-        let e = parse("Space").unwrap_err();
-        assert!(e.starts_with("hotkey \"Space\": "), "{e}");
+    fn bare_key_is_allowed() {
+        let hk = parse("F9").unwrap();
+        assert_eq!(hk, Hotkey { ctrl: false, alt: false, shift: false, win: false, vk: 0x78 });
+        assert!(!hk.is_modifier_only());
+    }
+
+    #[test]
+    fn lone_modifier() {
+        let hk = parse("Win").unwrap();
+        assert!(hk.win && !hk.ctrl && !hk.alt && !hk.shift);
+        assert!(hk.is_modifier_only());
+        assert!(parse("alt").unwrap().alt);
+        assert!(parse("Win+Shift").is_err());
     }
 
     #[test]

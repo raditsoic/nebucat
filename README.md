@@ -169,7 +169,7 @@ Saved changes apply without a restart. If the file fails to parse, nebucat keeps
 
 | Key | Default | Accepts |
 |---|---|---|
-| `hotkey` | `"Alt+Space"` | One or more of `Ctrl`, `Alt`, `Shift`, `Win`, plus exactly one key: `A`-`Z`, `0`-`9`, `Space`, `F1`-`F12`. Joined with `+`, case-insensitive. At least one modifier is required. |
+| `hotkey` | `"Alt+Space"` | Modifiers `Ctrl`, `Alt`, `Shift`, `Win` plus one key: `A`-`Z`, `0`-`9`, `Space`, `F1`-`F12`. Joined with `+`, case-insensitive. A key alone (`F9`) is allowed but is then unusable in other apps. A single modifier alone (`Win`) fires when tapped without pressing another key, via a low-level keyboard hook. |
 | `theme` | `"system"` | `"system"` follows the Windows app theme. `"nebula-dark"` or `"nebula-light"` for a built-in. Any other value loads `themes\<value>.toml`. |
 | `autostart` | `true` | `true` adds nebucat to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `nebucat`); `false` removes it. Release builds only; debug builds skip it. |
 | `max_results` | `8` | App result rows, `1` to `9`. Values outside are clamped. |
