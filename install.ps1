@@ -26,8 +26,10 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     $zip = Join-Path $tmp $zipAsset.name
     Invoke-WebRequest $zipAsset.browser_download_url -OutFile $zip
-    $sums = (Invoke-WebRequest $sumsAsset.browser_download_url -UseBasicParsing).Content
-    $line = ($sums -split "`n" | Where-Object { $_ -match [regex]::Escape($zipAsset.name) } | Select-Object -First 1)
+    # Saved to a file: GitHub serves it as binary, so .Content would be bytes, not text.
+    $sumsFile = Join-Path $tmp 'SHA256SUMS'
+    Invoke-WebRequest $sumsAsset.browser_download_url -OutFile $sumsFile
+    $line = (Get-Content $sumsFile | Where-Object { $_ -match [regex]::Escape($zipAsset.name) } | Select-Object -First 1)
     if (-not $line) { throw 'SHA256SUMS has no entry for the zip.' }
     $expected = ($line -split '\s+')[0].ToLower()
     $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
