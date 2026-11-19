@@ -23,14 +23,18 @@ use crate::{autostart, paths, settings, shellexec, window_ctl};
 
 const WIDTH: f32 = 680.;
 const BAR_H: f32 = 56.;
-const ROW_H: f32 = 48.;
+const ROW_H: f32 = 36.;
 const LIST_PAD: f32 = 8.;
 const BANNER_H: f32 = 36.;
-const OUT_HEADER_H: f32 = 36.;
 const OUT_FOOTER_H: f32 = 32.;
+const STATUS_H: f32 = 28.;
 const OUT_LINE_H: f32 = 20.;
 const OUT_PAD: f32 = 16.;
 const INDEX_MAX_AGE: Duration = Duration::from_secs(300);
+const CMD_HISTORY_MAX: usize = 200;
+const RESULTS_HINT: &str = "Enter open · Ctrl 1-9 pick · Esc hide";
+const CMD_EMPTY_HINT: &str = "Type a command · Up recalls history · Esc hide";
+const CMD_HINT: &str = "Enter run · Ctrl+Enter in Terminal · Up/Down history · Esc hide";
 const MONO: &str = "Atkinson Hyperlegible Mono";
 
 const PLACEHOLDER: &str = "Type an app, > for a command, / for files";
@@ -40,7 +44,6 @@ const EMPTY_HINT: &str =
 #[derive(Clone, PartialEq)]
 pub enum Source {
     App,
-    Command,
     File,
     Plugin(SharedString),
     Calc,
@@ -71,6 +74,7 @@ pub enum RowIcon {
 pub struct Row {
     pub title: SharedString,
     pub subtitle: Option<SharedString>,
+    pub meta: Option<SharedString>,
     pub highlight: Vec<u32>,
     pub source: Source,
     pub icon: RowIcon,
@@ -82,6 +86,7 @@ impl Row {
         Row {
             title: text.into(),
             subtitle: None,
+            meta: None,
             highlight: Vec::new(),
             source: Source::Notice,
             icon: RowIcon::None,
@@ -96,7 +101,6 @@ impl Row {
     fn label(&self) -> Option<SharedString> {
         Some(match &self.source {
             Source::App => "App".into(),
-            Source::Command => "Command".into(),
             Source::File => "File".into(),
             Source::Plugin(name) => name.clone(),
             Source::Calc => "Calc".into(),
@@ -124,7 +128,6 @@ enum Seg {
 type Line = Vec<(String, Seg, bool)>;
 
 struct Output {
-    cmd: String,
     run: CommandRun,
     snap: Snapshot,
     lines: Arc<Vec<Line>>,
@@ -196,6 +199,11 @@ pub struct Launcher {
     indexed_at: Option<Instant>,
     index_task: Option<Task<()>>,
     history: History,
+    cmd_history: Vec<String>,
+    cmd_cursor: Option<usize>,
+    cmd_draft: String,
+    cmd_last_set: Option<String>,
+    command_hint: Option<&'static str>,
     output: Option<Output>,
     output_task: Option<Task<()>>,
     out_scroll: UniformListScrollHandle,
@@ -224,15 +232,19 @@ impl Launcher {
         let mut subs = vec![
             cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
                 InputEvent::Change => {
-                    this.output_task = None;
-                    this.output = None;
+                    if this.cmd_last_set.take().as_deref() != Some(this.query_text(cx).as_str()) {
+                        this.cmd_cursor = None;
+                    }
+                    // Command output stays until the next run; any other mode drops it.
+                    if !this.in_command_mode(cx) {
+                        this.output_task = None;
+                        this.output = None;
+                    }
                     this.refresh(window, cx);
                 }
                 InputEvent::PressEnter { secondary, shift } => {
-                    if this.output.is_some() {
-                        if *secondary {
-                            this.open_output_in_terminal(window, cx);
-                        }
+                    if this.in_command_mode(cx) {
+                        this.run_typed_command(*secondary, window, cx);
                     } else {
                         this.activate(this.selected, *secondary, *shift, window, cx);
                     }
@@ -268,6 +280,11 @@ impl Launcher {
             indexed_at: None,
             index_task: None,
             history: apps::load_history(),
+            cmd_history: load_command_history(),
+            cmd_cursor: None,
+            cmd_draft: String::new(),
+            cmd_last_set: None,
+            command_hint: None,
             output: None,
             output_task: None,
             out_scroll: UniformListScrollHandle::new(),
@@ -420,19 +437,15 @@ impl Launcher {
         self.query_seq += 1;
         self.query_task = None;
         let keywords = self.plugins.keywords();
-        let rows = match query::parse(&text, &keywords) {
+        let mode = query::parse(&text, &keywords);
+        self.command_hint = match &mode {
+            Mode::Command(c) if c.is_empty() => Some(CMD_EMPTY_HINT),
+            Mode::Command(_) => Some(CMD_HINT),
+            _ => None,
+        };
+        let rows = match mode {
             Mode::Apps(q) => self.app_rows(&q),
-            Mode::Command(c) if c.is_empty() => {
-                vec![Row::notice("Type a command after >.", RowAction::None)]
-            }
-            Mode::Command(c) => vec![Row {
-                title: c.clone().into(),
-                subtitle: None,
-                highlight: Vec::new(),
-                source: Source::Command,
-                icon: RowIcon::None,
-                action: RowAction::RunCommand(c),
-            }],
+            Mode::Command(_) => Vec::new(),
             Mode::Files(q) if q.is_empty() => vec![Row::notice(
                 "Type a file name after /. Everything search syntax works, like ext:pdf.",
                 RowAction::None,
@@ -460,6 +473,7 @@ impl Launcher {
         Row {
             title: app.name.clone().into(),
             subtitle: None,
+            meta: None,
             highlight,
             source: Source::App,
             icon: app.icon.clone().map_or(RowIcon::None, RowIcon::Image),
@@ -496,6 +510,7 @@ impl Launcher {
             rows.push(Row {
                 title: format!("= {value}").into(),
                 subtitle: Some("Enter copies the result".into()),
+                meta: None,
                 highlight: Vec::new(),
                 source: Source::Calc,
                 icon: RowIcon::None,
@@ -527,6 +542,7 @@ impl Launcher {
                 rows.push(Row {
                     title: format!("Search the web for \"{q}\"").into(),
                     subtitle: None,
+                    meta: None,
                     highlight: Vec::new(),
                     source: Source::Web,
                     icon: RowIcon::None,
@@ -634,6 +650,7 @@ impl Launcher {
         Row {
             title: item.title.into(),
             subtitle: item.subtitle.map(Into::into),
+            meta: None,
             highlight: item.highlight.unwrap_or_default(),
             source: Source::Plugin(name.to_string().into()),
             icon,
@@ -710,18 +727,7 @@ impl Launcher {
                     cx,
                 );
             }
-            RowAction::RunCommand(cmd) => {
-                if secondary {
-                    self.shell_call(
-                        move || command::open_in_terminal(&cmd),
-                        |this, _, window, cx| this.hide(window, cx),
-                        window,
-                        cx,
-                    );
-                } else {
-                    self.run_command(cmd, window, cx);
-                }
-            }
+            RowAction::RunCommand(cmd) => self.activate_command(cmd, secondary, window, cx),
             RowAction::OpenPath(path) => {
                 let p = path.to_string_lossy().to_string();
                 let target = p.clone();
@@ -782,7 +788,7 @@ impl Launcher {
     fn run_command(&mut self, cmd: String, window: &mut Window, cx: &mut Context<Self>) {
         let run = CommandRun::start(&cmd, self.config.command.shell, self.config.command.timeout_secs);
         let snap = run.snapshot();
-        self.output = Some(Output { cmd, run, snap, lines: Arc::new(Vec::new()), plain: String::new() });
+        self.output = Some(Output { run, snap, lines: Arc::new(Vec::new()), plain: String::new() });
         self.update_output();
         self.output_task = Some(cx.spawn_in(window, async move |this, cx| {
             loop {
@@ -876,18 +882,6 @@ impl Launcher {
         running
     }
 
-    fn open_output_in_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(out) = &self.output {
-            let cmd = out.cmd.clone();
-            self.shell_call(
-                move || command::open_in_terminal(&cmd),
-                |this, _, window, cx| this.hide(window, cx),
-                window,
-                cx,
-            );
-        }
-    }
-
     fn copy_selection(&mut self, cx: &mut Context<Self>) {
         let text = if let Some(out) = &self.output {
             Some(out.plain.clone())
@@ -906,10 +900,82 @@ impl Launcher {
         }
     }
 
+    fn run_typed_command(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let keywords = self.plugins.keywords();
+        let Mode::Command(cmd) = query::parse(&self.query_text(cx), &keywords) else { return };
+        if cmd.is_empty() {
+            return;
+        }
+        self.activate_command(cmd, secondary, window, cx);
+    }
+
+    fn activate_command(&mut self, cmd: String, secondary: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.record_command(&cmd, cx);
+        if secondary {
+            self.shell_call(
+                move || command::open_in_terminal(&cmd),
+                |this, _, window, cx| this.hide(window, cx),
+                window,
+                cx,
+            );
+        } else {
+            self.run_command(cmd, window, cx);
+        }
+    }
+
+    fn in_command_mode(&self, cx: &App) -> bool {
+        let keywords = self.plugins.keywords();
+        matches!(query::parse(&self.query_text(cx), &keywords), Mode::Command(_))
+    }
+
+    fn record_command(&mut self, cmd: &str, cx: &App) {
+        let cmd = cmd.trim();
+        if cmd.is_empty() || !self.in_command_mode(cx) {
+            return;
+        }
+        self.cmd_history.retain(|c| c != cmd);
+        self.cmd_history.push(cmd.to_string());
+        let excess = self.cmd_history.len().saturating_sub(CMD_HISTORY_MAX);
+        self.cmd_history.drain(..excess);
+        self.cmd_cursor = None;
+        save_command_history(&self.cmd_history);
+    }
+
+    /// Shell-style recall: older steps back through history, newer steps forward to the draft.
+    fn step_command_history(&mut self, older: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let len = self.cmd_history.len();
+        let next = match (self.cmd_cursor, older) {
+            (_, true) if len == 0 => return,
+            (None, true) => {
+                self.cmd_draft = self.query_text(cx);
+                Some(len - 1)
+            }
+            (Some(i), true) => Some(i.saturating_sub(1)),
+            (None, false) => return,
+            (Some(i), false) if i + 1 < len => Some(i + 1),
+            (Some(_), false) => None,
+        };
+        self.cmd_cursor = next;
+        let value = match next {
+            Some(i) => format!(">{}", self.cmd_history[i]),
+            None => self.cmd_draft.clone(),
+        };
+        self.cmd_last_set = Some(value.clone());
+        self.input.update(cx, |s, cx| s.set_value(value, window, cx));
+    }
+
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = &ev.keystroke.modifiers;
         let key = ev.keystroke.key.as_str();
         let handled = match (key, m.control, m.shift, m.alt) {
+            ("up", false, _, false) if self.in_command_mode(cx) => {
+                self.step_command_history(true, window, cx);
+                true
+            }
+            ("down", false, _, false) if self.in_command_mode(cx) => {
+                self.step_command_history(false, window, cx);
+                true
+            }
             ("up", false, _, false) => {
                 self.move_selection(-1, cx);
                 true
@@ -1074,16 +1140,33 @@ impl Launcher {
     fn output_body_h(&self) -> f32 {
         let Some(out) = &self.output else { return 0. };
         let content = out.lines.len().max(1) as f32 * OUT_LINE_H + 2. * OUT_PAD;
-        let cap = (self.max_output_h - OUT_HEADER_H - OUT_FOOTER_H).max(OUT_LINE_H * 3.);
+        let cap = (self.max_output_h - OUT_FOOTER_H).max(OUT_LINE_H * 3.);
         content.min(cap)
+    }
+
+    /// Static key hints under the results. Command mode always shows them, since it has no rows.
+    fn footer_hint(&self) -> Option<&'static str> {
+        if self.output.is_some() {
+            return None;
+        }
+        self.command_hint
+            .or_else(|| self.rows.iter().any(Row::selectable).then_some(RESULTS_HINT))
     }
 
     fn content_height(&self) -> f32 {
         let mut h = BAR_H + self.banners().len() as f32 * BANNER_H;
         if self.output.is_some() {
-            h += 1. + OUT_HEADER_H + self.output_body_h() + OUT_FOOTER_H;
-        } else if !self.rows.is_empty() {
-            h += 1. + 2. * LIST_PAD + self.rows.len() as f32 * ROW_H;
+            h += 1. + self.output_body_h() + OUT_FOOTER_H;
+        } else {
+            if !self.rows.is_empty() {
+                h += 1. + 2. * LIST_PAD + self.rows.len() as f32 * ROW_H;
+            }
+            if self.footer_hint().is_some() {
+                if self.rows.is_empty() {
+                    h += 1.;
+                }
+                h += STATUS_H;
+            }
         }
         h
     }
@@ -1099,7 +1182,6 @@ impl Launcher {
     fn render_row(&self, i: usize, row: &Row, hint: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
         let t = ui_theme::active(cx).clone();
         let accent = match row.source {
-            Source::Command => t.accent_command,
             Source::File | Source::Plugin(_) => t.accent_extension,
             _ => t.accent_app,
         };
@@ -1109,17 +1191,43 @@ impl Launcher {
         let title_color = if row.source == Source::Notice { t.muted } else { t.text };
         let highlights = highlight_runs(&row.title, &row.highlight, hsla(accent));
         let title = div()
-            .text_size(px(15.))
+            .flex_1()
+            .min_w_0()
+            .text_size(px(14.))
             .text_color(hsla(title_color))
             .whitespace_nowrap()
             .overflow_hidden()
             .text_ellipsis()
             .child(StyledText::new(row.title.clone()).with_highlights(highlights));
 
-        let mut text_col = div().flex().flex_col().flex_1().min_w_0().child(title);
+        let mut el = div()
+            .id(("row", i))
+            .h(px(ROW_H))
+            .px(px(12.))
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .rounded(px(2.));
+
+        if row.source != Source::Notice {
+            // Fixed slot keeps titles aligned and stops layout shift when icons arrive.
+            let slot = div().size(px(24.)).flex_none().flex().items_center().justify_center();
+            let slot = match (&row.icon, &row.source) {
+                (RowIcon::Image(img_data), _) => slot.child(img(img_data.clone()).size(px(24.))),
+                (RowIcon::Path(p), _) => slot.child(img(p.clone()).size(px(24.))),
+                (_, Source::Calc) => slot.child(
+                    div().font_family(MONO).text_size(px(15.)).text_color(hsla(t.accent_app)).child("="),
+                ),
+                _ => slot,
+            };
+            el = el.child(slot);
+        }
+        el = el.child(title);
         if let Some(sub) = &row.subtitle {
-            text_col = text_col.child(
+            el = el.child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .text_size(px(12.))
                     .text_color(hsla(t.muted))
                     .whitespace_nowrap()
@@ -1129,33 +1237,16 @@ impl Launcher {
             );
         }
 
-        let mut el = div()
-            .id(("row", i))
-            .h(px(ROW_H))
-            .px(px(12.))
-            .flex()
-            .items_center()
-            .gap(px(12.))
-            .rounded(px(6.));
-
-        if row.source != Source::Notice {
-            // Fixed slot keeps titles aligned and stops layout shift when icons arrive.
-            let slot = div().size(px(24.)).flex_none().flex().items_center().justify_center();
-            let slot = match (&row.icon, &row.source) {
-                (RowIcon::Image(img_data), _) => slot.child(img(img_data.clone()).size(px(24.))),
-                (RowIcon::Path(p), _) => slot.child(img(p.clone()).size(px(24.))),
-                (_, Source::Command) => slot.child(
-                    div().font_family(MONO).text_size(px(15.)).text_color(hsla(t.accent_command)).child(">"),
-                ),
-                (_, Source::Calc) => slot.child(
-                    div().font_family(MONO).text_size(px(15.)).text_color(hsla(t.accent_app)).child("="),
-                ),
-                _ => slot,
-            };
-            el = el.child(slot);
+        if let Some(meta) = &row.meta {
+            el = el.child(
+                div()
+                    .flex_none()
+                    .font_family(MONO)
+                    .text_size(px(11.))
+                    .text_color(hsla(t.muted))
+                    .child(meta.clone()),
+            );
         }
-        el = el.child(text_col);
-
         if let Some(label) = row.label() {
             el = el.child(
                 div()
@@ -1226,28 +1317,6 @@ impl Launcher {
                 .child(format!("Couldn't start the shell: {e}"))
                 .into_any_element(),
         };
-        let header = div()
-            .h(px(OUT_HEADER_H))
-            .px(px(20.))
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap(px(12.))
-            .font_family(MONO)
-            .text_size(px(12.))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(8.))
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .child(div().text_color(hsla(t.accent_command)).child(">"))
-                    .child(div().text_color(hsla(t.text)).text_ellipsis().child(out.cmd.clone())),
-            )
-            .child(div().flex_none().child(status));
-
         let lines = out.lines.clone();
         let theme = t.clone();
         let body_h = self.output_body_h();
@@ -1271,20 +1340,35 @@ impl Launcher {
         } else {
             body.into_any_element()
         };
+        let hint = if out.snap.status == Status::Running {
+            "Enter run · Ctrl+Shift+C copy · Ctrl+Enter in Terminal"
+        } else {
+            "Enter run · Ctrl+Shift+C copy · Ctrl+Enter in Terminal · Esc clear"
+        };
         let footer = div()
             .h(px(OUT_FOOTER_H))
             .px(px(20.))
             .flex()
             .items_center()
+            .justify_between()
+            .gap(px(12.))
             .font_family(MONO)
             .text_size(px(11.))
             .text_color(hsla(t.muted))
-            .child("Ctrl+Shift+C copy · Ctrl+Enter open in Terminal · Esc back");
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(hint),
+            )
+            .child(div().flex_none().child(status));
         div()
             .flex()
             .flex_col()
             .child(div().h(px(1.)).bg(hsla(t.border)))
-            .child(header)
             .child(body)
             .child(footer)
             .into_any_element()
@@ -1305,7 +1389,6 @@ impl Render for Launcher {
         let bar = div()
             .h(px(BAR_H))
             .px(px(20.))
-            .font_family(MONO)
             .flex()
             .items_center()
             .child(
@@ -1356,20 +1439,65 @@ impl Render for Launcher {
 
         if self.output.is_some() {
             root = root.child(self.render_output(cx));
-        } else if !self.rows.is_empty() {
-            let mut list = div().flex().flex_col().p(px(LIST_PAD));
-            let mut actionable = 0;
-            let rows = self.rows.clone();
-            for (i, row) in rows.iter().enumerate() {
-                let hint = row.selectable().then(|| {
-                    actionable += 1;
-                    actionable
-                });
-                list = list.child(self.render_row(i, row, hint.filter(|n| *n <= 9), cx));
+        } else {
+            if !self.rows.is_empty() {
+                let mut list = div().flex().flex_col().p(px(LIST_PAD));
+                let mut actionable = 0;
+                let rows = self.rows.clone();
+                for (i, row) in rows.iter().enumerate() {
+                    let hint = row.selectable().then(|| {
+                        actionable += 1;
+                        actionable
+                    });
+                    list = list.child(self.render_row(i, row, hint.filter(|n| *n <= 9), cx));
+                }
+                root = root.child(div().h(px(1.)).bg(hsla(t.border))).child(list);
             }
-            root = root.child(div().h(px(1.)).bg(hsla(t.border))).child(list);
+            if let Some(hint) = self.footer_hint() {
+                if self.rows.is_empty() {
+                    root = root.child(div().h(px(1.)).bg(hsla(t.border)));
+                }
+                root = root.child(
+                    div()
+                        .h(px(STATUS_H))
+                        .px(px(20.))
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .font_family(MONO)
+                        .text_size(px(11.))
+                        .text_color(hsla(t.muted))
+                        .child(hint),
+                );
+            }
         }
         root
+    }
+}
+
+fn command_history_path() -> PathBuf {
+    paths::data_dir().join("command_history.txt")
+}
+
+fn load_command_history() -> Vec<String> {
+    match std::fs::read_to_string(command_history_path()) {
+        Ok(s) => s.lines().filter(|l| !l.is_empty()).map(str::to_string).collect(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            log::warn!("can't read command history, starting empty: {e}");
+            Vec::new()
+        }
+    }
+}
+
+fn save_command_history(history: &[String]) {
+    let path = command_history_path();
+    let result = path
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&path, history.join("\n")));
+    if let Err(e) = result {
+        log::error!("saving {} failed: {e}", path.display());
     }
 }
 
@@ -1389,10 +1517,54 @@ fn file_row(q: &str, hit: FileHit) -> Row {
     Row {
         title: hit.name.into(),
         subtitle: Some(hit.parent.into()),
+        meta: file_meta(hit.size, hit.modified),
         highlight,
         source: Source::File,
         icon: hit.icon.map_or(RowIcon::None, RowIcon::Image),
         action: RowAction::OpenPath(hit.path),
+    }
+}
+
+fn file_meta(size: Option<u64>, modified: Option<std::time::SystemTime>) -> Option<SharedString> {
+    let mut parts = Vec::with_capacity(2);
+    if let Some(bytes) = size {
+        parts.push(size_label(bytes));
+    }
+    if let Some(at) = modified {
+        parts.push(age_label(at));
+    }
+    (!parts.is_empty()).then(|| parts.join("  ").into())
+}
+
+fn size_label(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["K", "M", "G", "T"];
+    if bytes < 1024 {
+        return format!("{bytes}B");
+    }
+    let mut v = bytes as f64 / 1024.;
+    let mut i = 0;
+    while v >= 1024. && i < UNITS.len() - 1 {
+        v /= 1024.;
+        i += 1;
+    }
+    format!("{v:.1}{}", UNITS[i])
+}
+
+fn age_label(at: std::time::SystemTime) -> String {
+    let secs = std::time::SystemTime::now().duration_since(at).map_or(0, |d| d.as_secs());
+    let (mins, hours, days) = (secs / 60, secs / 3600, secs / 86400);
+    if secs < 60 {
+        "<1m".into()
+    } else if mins < 60 {
+        format!("{mins}m")
+    } else if hours < 24 {
+        format!("{hours}h")
+    } else if days < 30 {
+        format!("{days}d")
+    } else if days < 365 {
+        format!("{}mo", days / 30)
+    } else {
+        format!("{}y", days / 365)
     }
 }
 

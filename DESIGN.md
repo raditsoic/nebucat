@@ -18,7 +18,7 @@ Two themes ship: `nebula-dark` and `nebula-light`. The source of truth for the v
 | text | `#ECEAF2` | `#15141B` | primary text |
 | muted | `#A09DB0` | `#555168` | subtitles, hints, labels |
 | accent_app | `#B79CFF` | `#6D3FD1` | apps, calculator, web fallback, caret, focus ring |
-| accent_command | `#FF7AC6` | `#B8146F` | `>` prompt glyph, Command label, non-zero exit code |
+| accent_command | `#FF7AC6` | `#B8146F` | `>` prompt glyph in command output, non-zero exit code |
 | accent_extension | `#E08CFF` | `#8E2BB0` | files and plugin rows |
 
 ### Contrast
@@ -73,14 +73,14 @@ Accents color matched letters, the prompt glyph, source labels and the exit code
 
 - **UI font:** Atkinson Hyperlegible Next. Reason: its letterforms keep near-identical app names distinguishable when scanning fast.
 - **Mono font:** Atkinson Hyperlegible Mono, for command output, source labels and shortcut hints. Reason: same letterform family, so output and UI read as one voice.
-- **Query font:** Mono at 16px, not Next at 22px. Reason: the query is typed text, and a terminal-style face at a smaller size reads as a dev tool and stops the input from dominating the window.
+- **Query size:** 16px, not 22px. Reason: the query is typed text and should not dominate the window. It stays in Next because Mono letterforms are wide and space the typed text too far apart.
 - Fonts are bundled from `assets/fonts/` under the SIL Open Font License (`assets/fonts/OFL.txt`). Reason: the launcher must look the same on a machine without them installed.
 
 | Element | Font | Size | Weight |
 |---|---|---|---|
-| Query | Mono | 16px | Regular |
-| Row title | Next | 15px | Regular |
-| Matched letters in a title | Next | 15px | SemiBold 600 |
+| Query | Next | 16px | Regular |
+| Row title | Next | 14px | Regular |
+| Matched letters in a title | Next | 14px | SemiBold 600 |
 | Subtitle | Next | 12px | Regular |
 | Source labels and shortcut hints | Mono | 11px | Regular |
 | Command output | Mono | 13px, 20px line height | Regular |
@@ -90,7 +90,8 @@ Reason for SemiBold matches: weight plus accent color marks the match, so it sti
 ## Shape
 
 - **Window corners:** Windows 11 DWM round (`DWMWCP_ROUND`). Reason: matches every other window on the desktop without drawing custom corners.
-- **Row radius:** 6px. No pill shapes. Reason: rows are list items, not buttons.
+- **Row radius:** 2px. No pill shapes. Reason: sharp corners match a terminal's grid and the dev-tool direction; rows are list items, not buttons.
+- **Row layout:** one line, 36px tall: icon, title, subtitle, file size and age, source label, shortcut hint. Title and subtitle are two equal columns, and the subtitle is muted and cut with an ellipsis. Reason: more results fit, and the path sits beside the name instead of under it.
 - **Spacing scale:** 4, 8, 12, 16, 20, 24. Reason: one scale keeps every gap on the same rhythm (RHYTHM 1).
 - **Shadow:** only the DWM window shadow. Reason: the launcher floats above other apps; rows sit flat.
 
@@ -100,15 +101,20 @@ The default is `system`: nebucat follows the Windows app theme, and switches liv
 
 ## Identity motif
 
-Each row ends in a right-aligned column. It holds the source label (`App`, `Command`, `File`, plugin name, `Calc`, `Web`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Mono. Notice rows have no label and no hint.
+Each row ends in a right-aligned column. It holds the source label (`App`, `File`, plugin name, `Calc`, `Web`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Mono. Notice rows have no label and no hint. Command mode shows no result row: Enter runs the typed command, so a row would only repeat the query.
 
 | Label | Accent |
 |---|---|
 | `App`, `Calc`, `Web` | accent_app |
-| `Command` | accent_command |
 | `File`, plugin name | accent_extension |
 
 Reason: the label tells the user where a result came from in text, and the hint teaches the fastest way to pick it.
+
+File rows show size and age (`12.4K  3d`) in muted Mono 11, in the label column before the source label. Reason: the size and age show at a glance, like `ls -lh`. Age is relative, so it needs no timezone.
+
+### Results footer
+
+Shown under the results when at least one row is selectable, and always in command mode, where there are no rows. Right-aligned, muted Mono 11. Results: `Enter open · Ctrl 1-9 pick · Esc hide`. Command mode copy is in the Command mode section. Reason: a status line keeps the key hints visible without a help screen, and in command mode it replaces the row that only repeated the query.
 
 ## Motion (MOTION 2)
 
@@ -132,6 +138,7 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 ### Query input
 
 - Placeholder: `Type an app, > for a command, / for files`
+- In command mode, Up and Down recall earlier commands like a shell, newest first. Down past the newest restores what was typed. History keeps 200 unique commands in `%LOCALAPPDATA%\nebucat\command_history.txt`. Reason: developers rerun commands.
 
 ### Apps
 
@@ -143,16 +150,18 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 
 ### Command mode
 
-- Empty command: `Type a command after >.`
-- Header while running: `Running… <n> s · Esc to cancel`
-- Header after exit 0: `exit 0 · <secs> s`
-- Header after a non-zero exit: `exit <code>` in accent_command, then `· <secs> s` in muted.
-- Header after timeout: `Stopped after <n> s.`
+- Empty command: no row. The footer reads `Type a command · Up recalls history · Esc hide`.
+- Typed command: no row. The footer reads `Enter run · Ctrl+Enter in Terminal · Up/Down history · Esc hide`.
+- Status while running: `Running… <n> s · Esc to cancel`
+- Status after exit 0: `exit 0 · <secs> s`
+- Status after a non-zero exit: `exit <code>` in accent_command, then `· <secs> s` in muted.
+- Status after timeout: `Stopped after <n> s.`
 - Extra muted line after timeout: `Ctrl+Enter opens it in Windows Terminal for interactive commands.`
-- Header after Esc: `Cancelled.`
-- Header when the shell fails to start: `Couldn't start the shell: <e>`
+- Status after Esc: `Cancelled.`
+- Status when the shell fails to start: `Couldn't start the shell: <e>`
 - Muted line when output hits the cap: `Output truncated after 5000 lines.`
-- Footer: `Ctrl+Shift+C copy · Ctrl+Enter open in Terminal · Esc back`
+- Footer, one line in two columns. Left: `Enter run · Ctrl+Shift+C copy · Ctrl+Enter in Terminal · Esc clear`, without `Esc clear` while running. Right: the status. Reason: the status sits beside the hints instead of in a header row above the output, so the output starts right under the query. The command is not repeated, because the query bar already holds it.
+- The output stays while you edit the command and is replaced only when you run again. Esc clears it. Leaving command mode (deleting `>`) also clears it. Reason: you can tweak a command while reading the last result.
 
 ### Files
 

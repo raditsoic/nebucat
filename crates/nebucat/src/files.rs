@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use libloading::Library;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
@@ -15,6 +16,8 @@ pub struct FileHit {
     pub path: PathBuf,
     pub name: String,
     pub parent: String,
+    pub size: Option<u64>,
+    pub modified: Option<SystemTime>,
     pub icon: Option<Arc<gpui_kit::RenderImage>>,
 }
 
@@ -136,11 +139,16 @@ impl Everything {
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 let icon = crate::icons::for_path(&path, ICON_SIZE);
+                let meta = std::fs::metadata(&path).ok();
+                let size = meta.as_ref().map(|m| m.len());
+                let modified = meta.and_then(|m| m.modified().ok());
                 hits.push(FileHit {
                     path,
                     name,
                     parent,
                     icon,
+                    size,
+                    modified,
                 });
             }
             Ok(hits)
