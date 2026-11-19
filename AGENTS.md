@@ -40,8 +40,9 @@ crates/
       ui/theme.rs          applies core Theme to gpui-kit, ActiveTheme global
 themes/                    nebula-dark.toml, nebula-light.toml (built-ins, include_str!)
 assets/fonts/              Atkinson Hyperlegible Next and Mono, OFL.txt
-assets/icon/               generated placeholder icon (ico, png, raw rgba)
-tools/make_icon.py         generates assets/icon (python3, stdlib only)
+assets/icon/               generated icon (ico, png, raw rgba)
+assets/logo/nebucat.svg    generated pixel-art logo
+tools/make_icon.py         holds the logo pixel grid, generates assets/logo and assets/icon (python3, stdlib only)
 scripts/release.ps1        builds the release zip and SHA256SUMS
 examples/plugins/hello/    example plugin (plugin.toml, main.py)
 docs/                      ARCHITECTURE.md, PLUGINS.md

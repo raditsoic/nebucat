@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New logo: a pixel-art cat planet with a pink ring, replacing the placeholder "n" icon.
+
 ## 0.1.0
 
 First release.

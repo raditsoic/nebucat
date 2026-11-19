@@ -270,7 +270,7 @@ Third-party components, including the Atkinson Hyperlegible fonts (SIL Open Font
 
 Everything, the search application, is separate software with its own license. nebucat does not bundle it.
 
-The icon (a lowercase "n" on a dark rounded square) is a placeholder until a real logo exists. `tools/make_icon.py` generates it.
+The logo is a pixel-art cat planet. `tools/make_icon.py` holds its pixel grid and generates `assets/logo/nebucat.svg` and the icons in `assets/icon/`.
 
 ## Measured
 
