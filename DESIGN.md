@@ -73,11 +73,12 @@ Accents color matched letters, the prompt glyph, source labels and the exit code
 
 - **UI font:** Atkinson Hyperlegible Next. Reason: its letterforms keep near-identical app names distinguishable when scanning fast.
 - **Mono font:** Atkinson Hyperlegible Mono, for command output, source labels and shortcut hints. Reason: same letterform family, so output and UI read as one voice.
+- **Query font:** Mono at 16px, not Next at 22px. Reason: the query is typed text, and a terminal-style face at a smaller size reads as a dev tool and stops the input from dominating the window.
 - Fonts are bundled from `assets/fonts/` under the SIL Open Font License (`assets/fonts/OFL.txt`). Reason: the launcher must look the same on a machine without them installed.
 
 | Element | Font | Size | Weight |
 |---|---|---|---|
-| Query | Next | 22px | Regular |
+| Query | Mono | 16px | Regular |
 | Row title | Next | 15px | Regular |
 | Matched letters in a title | Next | 15px | SemiBold 600 |
 | Subtitle | Next | 12px | Regular |
@@ -157,7 +158,7 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 
 - Empty query: `Type a file name after /. Everything search syntax works, like ext:pdf.`
 - Everything not running: `Everything isn't running. Install it with winget install voidtools.Everything, then start it.`
-- DLL missing: `Everything64.dll is missing next to nebucat.exe. Run scripts/win.sh build.`
+- DLL missing: `Everything64.dll is missing next to nebucat.exe. File search needs it. See the README.`
 - No results: `No files match "<q>".`
 - Search takes longer than 300 ms: `Searching…`
 

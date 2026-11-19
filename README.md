@@ -15,46 +15,78 @@ Settings, themes and plugins live in `%APPDATA%\nebucat` and reload when you sav
 
 ## Requirements
 
-- Windows 11.
-- Optional: Everything, for `/` file search. Install it with `winget install voidtools.Everything` and keep it running. nebucat also needs `Everything64.dll` next to `nebucat.exe`; `scripts/win.sh build` puts it there.
+- Windows 11, 64-bit.
+- Optional: Everything, for `/` file search. Keep it running while you search. nebucat also needs `Everything64.dll` next to `nebucat.exe`. The release zip and the installer include it.
 - Optional: Windows Terminal (`wt.exe`), for `Ctrl+Enter` on commands. Without it, nebucat opens `cmd.exe` instead.
 - Optional: Python on `PATH`, for the example plugin.
 
-## Build
+## Install
 
-The source lives in WSL. GPUI cannot be cross-compiled from Linux, so the binary is built by the Windows Rust toolchain in a copy of the tree on the Windows drive. `scripts/win.sh` copies the tree and runs `cargo.exe` there.
+### Installer
 
-Windows needs:
+Run in PowerShell:
 
-- Rust with the `x86_64-pc-windows-msvc` host.
-- Visual Studio 2022 or its Build Tools (MSVC), and the Windows SDK (GPUI's build runs `fxc.exe` from it).
-
-WSL needs `bash`, `tar`, `curl` and `unzip`.
-
-`scripts/win.sh` has two machine-specific constants at the top. Change them for another machine:
-
-```bash
-WIN=/mnt/c/Users/radit/dev/nebucat              # Windows build copy
-CARGO=/mnt/c/Users/radit/.cargo/bin/cargo.exe   # Windows cargo
+```powershell
+irm https://raw.githubusercontent.com/raditsoic/nebucat/main/install.ps1 | iex
 ```
 
-Commands, run from the repo root in WSL:
 
-| Command | What it does |
-|---|---|
-| `cargo test -p nebucat-core` | Runs the core logic tests natively in WSL. `nebucat-core` has no Windows dependencies. |
-| `scripts/win.sh sync` | Copies the tree to the Windows build copy. Changed files only; files deleted in WSL are deleted there too. `target/` and `vendor/` are kept. |
-| `scripts/win.sh build [--release]` | `sync`, then `cargo build -p nebucat` on Windows. Copies `Cargo.lock` back to the repo. Downloads the Everything SDK into `vendor/` once and copies `Everything64.dll` next to the exe. |
-| `scripts/win.sh run [--release]` | Stops a running nebucat, builds, then starts `target\<profile>\nebucat.exe`. |
-| `scripts/win.sh kill` | Stops `nebucat.exe`. |
-| `scripts/win.sh test` | `sync`, then `cargo test --workspace` on Windows. |
-| `scripts/win.sh log` | Prints the last 200 lines of the log. |
+The installer:
 
-The first build compiles GPUI and takes several minutes. The release binary is `target\release\nebucat.exe` in the Windows build copy.
+- Downloads the latest release zip and checks it against `SHA256SUMS`.
+- Installs to `%LOCALAPPDATA%\Programs\nebucat`.
+- Creates a Start Menu shortcut.
 
-Do not edit the Windows build copy directly. The next `sync` overwrites it.
+To also install Everything through winget, save the script and run it with `-WithEverything`:
 
-`Everything64.dll` is downloaded at build time and is not committed to this repo.
+```powershell
+irm https://raw.githubusercontent.com/raditsoic/nebucat/main/install.ps1 -OutFile install.ps1
+.\install.ps1 -WithEverything
+```
+
+To remove nebucat, run `uninstall.ps1`. Add `-Purge` to also delete `%APPDATA%\nebucat` (config, themes, plugins, launch history).
+
+### Release zip
+
+1. Download `nebucat-vX.Y.Z-windows-x64.zip` from the GitHub Releases page.
+2. Extract it anywhere. It contains `nebucat.exe`, `Everything64.dll`, `LICENSE`, `THIRD_PARTY.md`, the font license texts (OFL), `README.md` and `examples/plugins/hello`.
+3. Run `nebucat.exe`.
+
+### Everything (optional)
+
+`/` file search needs the Everything app running. Install it with winget:
+
+```powershell
+winget install voidtools.Everything
+```
+
+Everything is separate software with its own license. nebucat does not bundle it. It only loads `Everything64.dll` from the Everything SDK at runtime.
+
+### SmartScreen
+
+`nebucat.exe` is not code-signed, so Windows SmartScreen warns the first time you run it. Choose `More info`, then `Run anyway`. The icon is a placeholder.
+
+## Build from source
+
+Native Windows only. GPUI cannot be cross-compiled from another OS.
+
+You need:
+
+- Rust, installed with [rustup](https://rustup.rs/), using the `x86_64-pc-windows-msvc` toolchain.
+- Visual Studio Build Tools (or Visual Studio) with the MSVC C++ tools and a Windows SDK. GPUI's release build runs `fxc.exe` from the Windows SDK.
+
+Build and test:
+
+```powershell
+cargo build --release -p nebucat
+cargo test --workspace
+```
+
+The first build compiles GPUI and takes several minutes. The binary is `target\release\nebucat.exe`.
+
+`/` file search needs `Everything64.dll` next to the exe. Download the [Everything SDK zip](https://www.voidtools.com/Everything-SDK.zip), take `dll\Everything64.dll`, and copy it next to `nebucat.exe`. Without the DLL everything else works and `/` searches show a message that the DLL is missing.
+
+Debug builds load shaders from a path baked in at compile time, so run a debug build on the machine that built it.
 
 ## Usage
 
@@ -117,7 +149,7 @@ What `Enter` does per source:
 
 ### Files
 
-`/` searches go to Everything after a 120 ms pause in typing. Rows show the file name and its parent folder. If Everything is not running, the launcher says `Everything isn't running. Install it with winget install voidtools.Everything, then start it.` If the DLL is missing, it says `Everything64.dll is missing next to nebucat.exe. Run scripts/win.sh build.`
+`/` searches go to Everything after a 120 ms pause in typing. Rows show the file name and its parent folder. If Everything is not running, the launcher tells you to start it (or install it with `winget install voidtools.Everything`). If `Everything64.dll` is not next to `nebucat.exe`, the launcher says the DLL is missing.
 
 ### App index
 
@@ -220,6 +252,7 @@ The manifest fields, wire protocol, action types, timeouts and error behavior ar
 | Plugins | `%APPDATA%\nebucat\plugins\<name>\plugin.toml` |
 | Launch history | `%APPDATA%\nebucat\history.json` |
 | Log | `%LOCALAPPDATA%\nebucat\logs\nebucat.log` (cleared at each start) |
+| Installed files (installer) | `%LOCALAPPDATA%\Programs\nebucat` |
 | Everything DLL | `Everything64.dll` next to `nebucat.exe` |
 
 ## Further reading
@@ -229,14 +262,19 @@ The manifest fields, wire protocol, action types, timeouts and error behavior ar
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): crates, modules, threads and channels.
 - [docs/PLUGINS.md](docs/PLUGINS.md): plugin protocol.
 
-## Credits
+## Licenses
 
-- UI fonts: Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono, under the SIL Open Font License 1.1. License texts: `assets/fonts/OFL.txt` and `assets/fonts/OFL-Mono.txt`.
-- The icon (a lowercase "n" on a dark rounded square) is a placeholder until a real logo exists. `tools/make_icon.py` generates it.
+nebucat is released under the [MIT License](LICENSE). The copyright notice is in that file.
+
+Third-party components, including the Atkinson Hyperlegible fonts (SIL Open Font License 1.1; texts in `assets/fonts/OFL.txt` and `assets/fonts/OFL-Mono.txt`) and the Everything SDK DLL (MIT), are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Everything, the search application, is separate software with its own license. nebucat does not bundle it.
+
+The icon (a lowercase "n" on a dark rounded square) is a placeholder until a real logo exists. `tools/make_icon.py` generates it.
 
 ## Measured
 
-Measured on 2026-11-18, Windows 11, Intel Arc Graphics, release build:
+Measured on one machine on 2026-11-18 (Windows 11, Intel Arc Graphics), release build. Your numbers will differ.
 
 | Metric | Value |
 | --- | --- |

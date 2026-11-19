@@ -574,7 +574,7 @@ impl Launcher {
                         RowAction::None,
                     )],
                     Err(FilesError::DllMissing) => vec![Row::notice(
-                        "Everything64.dll is missing next to nebucat.exe. Run scripts/win.sh build.",
+                        "Everything64.dll is missing next to nebucat.exe. File search needs it. See the README.",
                         RowAction::None,
                     )],
                     Err(FilesError::Other(e)) => vec![Row::notice(e, RowAction::None)],
@@ -1305,6 +1305,7 @@ impl Render for Launcher {
         let bar = div()
             .h(px(BAR_H))
             .px(px(20.))
+            .font_family(MONO)
             .flex()
             .items_center()
             .child(
@@ -1313,7 +1314,7 @@ impl Render for Launcher {
                     .appearance(false)
                     .bordered(false)
                     .focus_bordered(false)
-                    .text_size(px(22.)),
+                    .text_size(px(16.)),
             );
 
         let mut root = div()

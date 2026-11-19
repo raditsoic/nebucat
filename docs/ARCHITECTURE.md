@@ -6,7 +6,7 @@ nebucat is one Windows process with one gpui window. The gpui main thread owns a
 
 ### `crates/nebucat-core`
 
-Pure Rust library with no Windows dependencies. It builds and tests in WSL with native `cargo test -p nebucat-core`.
+Pure Rust library with no Windows dependencies. It builds and tests on any OS with `cargo test -p nebucat-core`.
 
 | Module | Purpose |
 |---|---|
@@ -159,15 +159,10 @@ Pending requests live in a `Mutex<HashMap<id, Pending>>`. Each reply reaches the
 
 ## Build model
 
-Source lives in WSL at `~/projects/internal/nebucat`. The Windows binary compiles with the Windows MSVC toolchain in a build copy at `C:\Users\radit\dev\nebucat`.
+The Windows binary builds with the MSVC toolchain on a Windows host: `cargo build --release -p nebucat`, and `cargo test --workspace` for all tests. The host needs Visual Studio Build Tools with the Windows SDK.
 
-GPUI cannot be cross-compiled from Linux. Its release build runs `fxc.exe` to compile shaders, and `fxc.exe` exists only on a Windows host with the Windows SDK. Debug builds load shaders from a path fixed at compile time, so a Linux-built debug binary would point at a Linux path.
+GPUI cannot be cross-compiled from Linux or macOS. Its release build runs `fxc.exe` to compile shaders, and `fxc.exe` ships only with the Windows SDK. Debug builds load shaders from a path fixed at compile time, so run a debug binary on the machine that built it.
 
-`scripts/win.sh` bridges the two sides:
+`nebucat-core` has no Windows dependencies, so its tests also run natively on any OS.
 
-- `sync` copies the tree (without `target/` and `.git/`) to the build copy. It writes only changed files, with a fresh mtime so cargo notices the edit, and deletes files that no longer exist in WSL. `target/` and `vendor/` on the Windows side are kept.
-- `build [--release]` syncs, runs `cargo.exe build -p nebucat`, copies `Cargo.lock` back into the repo, and places `Everything64.dll` next to the exe. The DLL is downloaded from the Everything SDK into `vendor/` once and is never committed.
-- `run [--release]` stops the running instance (Windows locks the exe), builds, and starts it through `explorer.exe`.
-- `test` syncs and runs `cargo.exe test --workspace` on Windows. `log` prints the last 200 log lines. `kill` runs `taskkill`.
-
-`nebucat-core` has no Windows dependencies, so its tests also run natively in WSL. Never edit the build copy directly: the next `sync` overwrites it.
+`Everything64.dll` is not built from this repo. `files.rs` loads it at runtime from the exe's folder, and only the `/` file search needs it. Download the Everything SDK zip from https://www.voidtools.com/Everything-SDK.zip, take `dll/Everything64.dll`, and place it beside `nebucat.exe`. nebucat never bundles the Everything app itself.

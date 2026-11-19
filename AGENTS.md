@@ -11,7 +11,7 @@ nebucat is a keyboard launcher for Windows 11, written in Rust on GPUI (via gpui
 ```
 Cargo.toml                 workspace (resolver 3, edition 2024, dev opt-levels for gpui crates)
 crates/
-  nebucat-core/            pure Rust lib, no Windows deps, tested in WSL
+  nebucat-core/            pure Rust lib, no Windows deps, tests run on any OS
     src/
       ansi.rs              ANSI/SGR bytes -> colored spans (vte)
       calc.rs              f64 expression parser and result formatting
@@ -42,35 +42,38 @@ themes/                    nebula-dark.toml, nebula-light.toml (built-ins, inclu
 assets/fonts/              Atkinson Hyperlegible Next and Mono, OFL.txt
 assets/icon/               generated placeholder icon (ico, png, raw rgba)
 tools/make_icon.py         generates assets/icon (python3, stdlib only)
-scripts/win.sh             WSL -> Windows sync, build, run, test, log, kill
+scripts/release.ps1        builds the release zip and SHA256SUMS
 examples/plugins/hello/    example plugin (plugin.toml, main.py)
 docs/                      ARCHITECTURE.md, PLUGINS.md
 DESIGN.md                  visual direction, palette, type, motion, state copy
+install.ps1                downloads the latest release, installs, adds a Start Menu shortcut
+uninstall.ps1              removes the install; -Purge also removes %APPDATA%\nebucat
+LICENSE                    MIT
+THIRD_PARTY.md             third-party licenses and notices
+CHANGELOG.md               release notes
 ```
 
 ## Build and test
 
-Core logic, in WSL:
+Core logic builds and tests on any OS:
 
 ```sh
 cargo test -p nebucat-core
 ```
 
-Windows binary, from WSL:
+The Windows binary builds on Windows only. Install Rust through rustup with the MSVC toolchain, plus Visual Studio Build Tools with the Windows SDK.
 
 ```sh
-scripts/win.sh build [--release]   # sync, cargo build, fetch Everything64.dll beside the exe
-scripts/win.sh run [--release]     # build, kill the running instance, start it
-scripts/win.sh test                # sync, cargo test --workspace on Windows
-scripts/win.sh log                 # last 200 lines of %LOCALAPPDATA%\nebucat\logs\nebucat.log
-scripts/win.sh kill                # taskkill nebucat.exe
+cargo build -p nebucat             # debug build
+cargo build --release -p nebucat   # release build
+cargo test --workspace             # all crates
 ```
 
-The binary builds only with the Windows toolchain. GPUI cannot be cross-compiled from Linux: its release build runs `fxc.exe`, which exists only on a Windows host, and debug builds load shaders from a path baked in at compile time. `scripts/win.sh` copies the source to `C:\Users\radit\dev\nebucat` and runs `cargo.exe` there.
+GPUI cannot be cross-compiled from Linux or macOS. Its release build runs `fxc.exe` from the Windows SDK, and debug builds load shaders from a path baked in at compile time, so run a debug build on the machine that built it.
 
-Never edit `C:\Users\radit\dev\nebucat` directly. `sync` deletes everything there except `target/` and `vendor/`, then copies the WSL tree over it. Edit the WSL repo only.
+`Everything64.dll` must sit beside `nebucat.exe`, but only the `/` file search needs it. Download the Everything SDK zip from https://www.voidtools.com/Everything-SDK.zip and copy `dll/Everything64.dll` next to the exe. It is never committed.
 
-`Everything64.dll` is downloaded into `vendor/` and is never committed.
+The log is `%LOCALAPPDATA%\nebucat\logs\nebucat.log`.
 
 ## UI rules
 
