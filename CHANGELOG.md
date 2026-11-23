@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `!` lists power options: Restart, Shut down, Sleep and Hibernate, each with a pixel glyph. Each needs a second Enter. Shut down behaves like the Start menu, with Fast Startup when it is on. Sleep on Modern Standby PCs turns the display off like the Start menu does.
+- `[system] enabled = false` turns the `!` prefix off.
+- Plugin keywords may no longer start with `!`.
+
 ## 0.2.0
 
 - `hotkey` accepts a single key without a modifier (`F9`) and a single modifier tapped alone (`Win`), using a low-level keyboard hook for the latter.

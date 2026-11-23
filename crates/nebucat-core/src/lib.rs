@@ -6,6 +6,7 @@ pub mod history;
 pub mod hotkey;
 pub mod json;
 pub mod plugin_proto;
+pub mod power;
 pub mod query;
 pub mod theme;
 pub mod url;

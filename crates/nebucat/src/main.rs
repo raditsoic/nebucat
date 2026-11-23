@@ -23,6 +23,10 @@ mod logo;
 #[cfg(windows)]
 mod plugins;
 #[cfg(windows)]
+mod power;
+#[cfg(windows)]
+mod pixel;
+#[cfg(windows)]
 mod shellexec;
 #[cfg(windows)]
 mod paths;

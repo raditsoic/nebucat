@@ -10,6 +10,7 @@ pub struct Config {
     pub command: CommandCfg,
     pub web: WebCfg,
     pub files: FilesCfg,
+    pub system: SystemCfg,
 }
 
 impl Default for Config {
@@ -22,6 +23,7 @@ impl Default for Config {
             command: CommandCfg::default(),
             web: WebCfg::default(),
             files: FilesCfg::default(),
+            system: SystemCfg::default(),
         }
     }
 }
@@ -71,6 +73,18 @@ pub struct FilesCfg {
 impl Default for FilesCfg {
     fn default() -> Self {
         Self { max_results: 8 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SystemCfg {
+    pub enabled: bool,
+}
+
+impl Default for SystemCfg {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }
 
@@ -127,6 +141,10 @@ url = "https://www.google.com/search?q={query}"
 [files]
 # File rows shown for / searches.
 max_results = 8
+
+[system]
+# true lets ! open power options: restart, shut down, sleep, hibernate.
+enabled = true
 "##;
 
 #[cfg(test)]
@@ -160,6 +178,12 @@ mod tests {
         let c = Config::parse("[command]\nshell = \"powershell\"").unwrap();
         assert_eq!(c.command.shell, Shell::Powershell);
         assert_eq!(c.command.timeout_secs, 15);
+    }
+
+    #[test]
+    fn system_switch() {
+        assert!(!Config::parse("[system]\nenabled = false").unwrap().system.enabled);
+        assert!(Config::parse("[system]\nfoo = 1").is_err());
     }
 
     #[test]

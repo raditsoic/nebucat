@@ -10,6 +10,7 @@ use nebucat_core::config::Config;
 use nebucat_core::history::{self, History};
 use nebucat_core::json::{self, Tok};
 use nebucat_core::plugin_proto::{Action as PluginAction, Item};
+use nebucat_core::power::{self as power_match, PowerAction};
 use nebucat_core::query::{self, Mode};
 use nebucat_core::{calc, fuzzy, hotkey, url};
 use windows::Win32::Foundation::{HANDLE, HWND};
@@ -20,7 +21,7 @@ use crate::files::{FileHit, Files, FilesError};
 use crate::plugins::Plugins;
 use crate::shell::{self, ShellEvent, ShellHandle};
 use crate::ui::theme::{self as ui_theme, hsla, hsla_alpha};
-use crate::{autostart, paths, settings, shellexec, window_ctl};
+use crate::{autostart, paths, pixel, power, settings, shellexec, window_ctl};
 
 const WIDTH: f32 = 680.;
 const BAR_H: f32 = 56.;
@@ -36,6 +37,8 @@ const CMD_HISTORY_MAX: usize = 200;
 const RESULTS_HINT: &str = "Enter open · Ctrl 1-9 pick · Esc hide";
 const CMD_EMPTY_HINT: &str = "Type a command · Up recalls history · Esc hide";
 const CMD_HINT: &str = "Enter run · Ctrl+Enter in Terminal · Up/Down history · Esc hide";
+const CONFIRM_HINT: &str = "Enter confirm · Esc back";
+const HIBERNATE_OFF: &str = "Hibernate is off. Turn it on with powercfg /hibernate on in an admin terminal.";
 const MONO: &str = "Atkinson Hyperlegible Mono";
 const PIXEL: &str = "Departure Mono";
 
@@ -50,6 +53,7 @@ pub enum Source {
     Plugin(SharedString),
     Calc,
     Web,
+    System,
     Notice,
 }
 
@@ -62,6 +66,7 @@ pub enum RowAction {
     Copy(String),
     PluginAction { keyword: String, data: serde_json::Value },
     Reindex,
+    Power { action: PowerAction, confirmed: bool },
     None,
 }
 
@@ -72,6 +77,8 @@ pub enum RowIcon {
     Path(PathBuf),
     /// The pixel logo; only the empty-state notice uses it.
     Logo,
+    /// A pixel glyph in the source accent; only power rows use it.
+    Glyph(&'static pixel::Glyph),
 }
 
 #[derive(Clone)]
@@ -109,6 +116,7 @@ impl Row {
             Source::Plugin(name) => name.clone(),
             Source::Calc => "Calc".into(),
             Source::Web => "Web".into(),
+            Source::System => "System".into(),
             Source::Notice => return None,
         })
     }
@@ -448,7 +456,7 @@ impl Launcher {
         self.query_seq += 1;
         self.query_task = None;
         let keywords = self.plugins.keywords();
-        let mode = query::parse(&text, &keywords);
+        let mode = query::parse(&text, &keywords, self.config.system.enabled);
         self.command_hint = match &mode {
             Mode::Command(c) if c.is_empty() => Some(CMD_EMPTY_HINT),
             Mode::Command(_) => Some(CMD_HINT),
@@ -469,6 +477,7 @@ impl Launcher {
                 self.query_plugin(keyword, rest, window, cx);
                 return;
             }
+            Mode::System(q) => self.power_rows(&q),
         };
         self.set_rows(rows, window, cx);
     }
@@ -572,6 +581,53 @@ impl Launcher {
             }
         }
         rows
+    }
+
+    fn power_rows(&self, q: &str) -> Vec<Row> {
+        let hits = power_match::matches(q);
+        if hits.is_empty() {
+            return vec![Row::notice(format!("No power option matches \"{q}\"."), RowAction::None)];
+        }
+        let caps = power::capabilities();
+        hits.into_iter()
+            .take(self.config.max_results.clamp(1, 9))
+            .map(|hit| match hit.action {
+                PowerAction::Hibernate if !caps.hibernate => Row::notice(HIBERNATE_OFF, RowAction::None),
+                PowerAction::Sleep if !caps.sleep => {
+                    Row::notice("This PC doesn't support sleep.", RowAction::None)
+                }
+                action => Row {
+                    title: action.title().into(),
+                    subtitle: None,
+                    meta: None,
+                    highlight: hit.indices,
+                    source: Source::System,
+                    icon: RowIcon::Glyph(pixel::power_glyph(action)),
+                    action: RowAction::Power { action, confirmed: false },
+                },
+            })
+            .collect()
+    }
+
+    fn awaiting_confirm(&self) -> bool {
+        self.rows.iter().any(|r| matches!(r.action, RowAction::Power { confirmed: true, .. }))
+    }
+
+    fn run_power(&mut self, action: PowerAction, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide(window, cx);
+        // Queued after hide's task, so the window is gone before the PC sleeps.
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Err(code)) = power::run(action).recv().await else { return };
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.show(window, cx);
+                this.set_rows(
+                    vec![Row::notice(format!("Couldn't {} (error {code}).", action.verb()), RowAction::None)],
+                    window,
+                    cx,
+                );
+            });
+        })
+        .detach();
     }
 
     fn search_files(&mut self, q: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -800,6 +856,20 @@ impl Launcher {
                 self.reindex(false, window, cx);
                 self.refresh(window, cx);
             }
+            RowAction::Power { action, confirmed: false } => self.set_rows(
+                vec![Row {
+                    title: format!("{} now?", action.title()).into(),
+                    subtitle: None,
+                    meta: None,
+                    highlight: Vec::new(),
+                    source: Source::System,
+                    icon: RowIcon::Glyph(pixel::power_glyph(action)),
+                    action: RowAction::Power { action, confirmed: true },
+                }],
+                window,
+                cx,
+            ),
+            RowAction::Power { action, confirmed: true } => self.run_power(action, window, cx),
             RowAction::None => {}
         }
     }
@@ -921,7 +991,9 @@ impl Launcher {
 
     fn run_typed_command(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<Self>) {
         let keywords = self.plugins.keywords();
-        let Mode::Command(cmd) = query::parse(&self.query_text(cx), &keywords) else { return };
+        let Mode::Command(cmd) = query::parse(&self.query_text(cx), &keywords, self.config.system.enabled) else {
+            return;
+        };
         if cmd.is_empty() {
             return;
         }
@@ -944,7 +1016,10 @@ impl Launcher {
 
     fn in_command_mode(&self, cx: &App) -> bool {
         let keywords = self.plugins.keywords();
-        matches!(query::parse(&self.query_text(cx), &keywords), Mode::Command(_))
+        matches!(
+            query::parse(&self.query_text(cx), &keywords, self.config.system.enabled),
+            Mode::Command(_)
+        )
     }
 
     fn record_command(&mut self, cmd: &str, cx: &App) {
@@ -1019,6 +1094,7 @@ impl Launcher {
                         self.output = None;
                         self.refresh(window, cx);
                     }
+                    None if self.awaiting_confirm() => self.refresh(window, cx),
                     None => self.hide(window, cx),
                 }
                 true
@@ -1168,6 +1244,9 @@ impl Launcher {
         if self.output.is_some() {
             return None;
         }
+        if self.awaiting_confirm() {
+            return Some(CONFIRM_HINT);
+        }
         self.command_hint
             .or_else(|| self.rows.iter().any(Row::selectable).then_some(RESULTS_HINT))
     }
@@ -1235,6 +1314,7 @@ impl Launcher {
             let slot = match (&row.icon, &row.source) {
                 (RowIcon::Image(img_data), _) => slot.child(img(img_data.clone()).size(px(24.))),
                 (RowIcon::Path(p), _) => slot.child(img(p.clone()).size(px(24.))),
+                (RowIcon::Glyph(g), _) => slot.child(pixel::glyph(g, hsla(accent))),
                 (_, Source::Calc) => slot.child(
                     div().font_family(MONO).text_size(px(15.)).text_color(hsla(t.accent_app)).child("="),
                 ),

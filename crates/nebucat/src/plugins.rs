@@ -77,7 +77,7 @@ impl Plugins {
                 }
             };
             let k = &manifest.keyword;
-            if k.is_empty() || k.chars().any(char::is_whitespace) || k.starts_with(['>', '/']) {
+            if k.is_empty() || k.chars().any(char::is_whitespace) || k.starts_with(['>', '/', '!']) {
                 banners.push(format!("Plugin {dir_name}: keyword \"{k}\" not allowed"));
                 continue;
             }
