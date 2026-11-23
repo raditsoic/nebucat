@@ -10,7 +10,8 @@ Pure Rust library with no Windows dependencies. It builds and tests on any OS wi
 
 | Module | Purpose |
 |---|---|
-| `query.rs` | Parses the input into `Mode`: `Apps`, `Command` (`>`), `Files` (`/`), or `Plugin` (keyword plus a space). |
+| `query.rs` | Parses the input into `Mode`: `Apps`, `Command` (`>`), `Files` (`/`), `System` (`!`, when `[system] enabled`), or `Plugin` (keyword plus a space). |
+| `power.rs` | Power actions, their titles and aliases, and fuzzy matching for the `!` list. |
 | `fuzzy.rs` | Ranks names with nucleo-matcher plus history boosts; returns matched char indices. |
 | `history.rs` | Launch counts and last-used times per app id; `boost(count) = 12 * ln(1 + count)`. |
 | `calc.rs` | Recursive-descent f64 calculator (`+ - * / % ^`, parentheses) and result formatting. |
@@ -39,6 +40,7 @@ The Windows binary. On other targets `main` prints `nebucat runs on Windows only
 | `command.rs` | Runs `>` commands in a Job Object with reader and waiter threads; timeout and cancel. |
 | `files.rs` | Everything thread that owns `Everything64.dll`; file hits with icons. |
 | `plugins.rs` | Plugin discovery, one child process per plugin, request routing and timeouts. |
+| `power.rs` | Power capabilities (`powrprof`), shutdown privilege, and Restart, Shut down, Sleep and Hibernate on a short-lived `power` thread, since `SetSuspendState` blocks until wake. |
 | `shellexec.rs` | `ShellExecuteW` wrapper; return codes `<= 32` become `Err(code)`. |
 | `autostart.rs` | `HKCU\...\Run` value `nebucat` (release builds only). |
 | `ui/theme.rs` | Picks the active theme, applies it to gpui-kit, stores it in the `ActiveTheme` global. |

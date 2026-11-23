@@ -103,11 +103,11 @@ The default is `system`: nebucat follows the Windows app theme, and switches liv
 
 ## Identity motif
 
-Each row ends in a right-aligned column. It holds the source label (`App`, `File`, plugin name, `Calc`, `Web`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Pixel. Notice rows have no label and no hint. Command mode shows no result row: Enter runs the typed command, so a row would only repeat the query.
+Each row ends in a right-aligned column. It holds the source label (`App`, `File`, plugin name, `Calc`, `Web`, `System`) in that source's accent, then the `Ctrl 1` to `Ctrl 9` shortcut hint in muted Pixel. Notice rows have no label and no hint. Command mode shows no result row: Enter runs the typed command, so a row would only repeat the query.
 
 | Label | Accent |
 |---|---|
-| `App`, `Calc`, `Web` | accent_app |
+| `App`, `Calc`, `Web`, `System` | accent_app |
 | `File`, plugin name | accent_extension |
 
 Reason: the label tells the user where a result came from in text, and the hint teaches the fastest way to pick it.
@@ -133,7 +133,9 @@ A 32×32 pixel-art cat whose round head is a planet with a pink ring, on a `#151
 
 Rows show only real app and file icons from the Windows shell, in a reserved 24×24 slot. No icon library glyphs. Reason: R-04. gpui-kit bundles Lucide icons; do not use them in result rows. The slot is reserved even before an icon loads, so rows do not shift.
 
-The one exception is the empty-state notice, which shows the pixel logo at 32×32 before its text. It is not a result, so R-04 does not apply. Its cells are snapped to whole device pixels, so it stays sharp at any display scale. Reason: the first thing a new user sees carries the brand.
+Two exceptions. The empty-state notice shows the pixel logo at 32×32 before its text. It is not a result, so R-04 does not apply. Its cells are snapped to whole device pixels, so it stays sharp at any display scale. Reason: the first thing a new user sees carries the brand.
+
+Power rows have no shell icon, so they show a hand-drawn 11×11 pixel glyph at 2px per cell (22px in the 24px slot), one color in accent_app, snapped like the logo: a circular arrow for Restart, the power symbol for Shut down, a crescent moon for Sleep, a snowflake for Hibernate. The grids live in `crates/nebucat/src/pixel.rs`. Reason: Windows has no matching shell icons, and pixel art is nebucat's own voice (the logo, Departure Mono), not a library look.
 
 ## State copy
 
@@ -180,6 +182,16 @@ These strings are exact. Placeholders in angle brackets are filled at runtime. C
 - Calculator row title: `= <result>`
 - Calculator row subtitle: `Enter copies the result`
 - Web row title: `Search the web for "<q>"`
+
+### Power options
+
+- Prefix `!`, when `[system] enabled = true`. An empty `!` lists all four options.
+- Row titles: `Restart`, `Shut down`, `Sleep`, `Hibernate`. Label `System`. Each row and its confirmation row show the action's pixel glyph (see Icons in rows).
+- Every option needs a second Enter. Confirmation row: `<Title> now?`, for example `Shut down now?`. Footer: `Enter confirm · Esc back`. Esc returns to the list; typing drops the confirmation. Reason: one stray Enter must not end the session.
+- No match: `No power option matches "<q>".`
+- Hibernation off: `Hibernate is off. Turn it on with powercfg /hibernate on in an admin terminal.`
+- No sleep support: `This PC doesn't support sleep.`
+- Failure (the window reopens): `Couldn't <verb> (error <code>).`, where verb is `restart`, `shut down`, `sleep` or `hibernate`.
 
 ### Plugins
 

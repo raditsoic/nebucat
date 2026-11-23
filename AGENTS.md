@@ -21,7 +21,8 @@ crates/
       hotkey.rs            "Alt+Space" style hotkey parsing
       json.rs              pretty-print and tokenize JSON output
       plugin_proto.rs      plugin manifest and wire types
-      query.rs             input -> Mode (apps, >command, /files, plugin keyword)
+      power.rs             power actions, aliases, fuzzy matching for the ! list
+      query.rs             input -> Mode (apps, >command, /files, !power, plugin keyword)
       theme.rs             Theme struct, built-ins, theme file parsing
       url.rs               query-string encoding for the web fallback
   nebucat/                 Windows binary
@@ -37,6 +38,7 @@ crates/
       command.rs           > command runner, job object, output panel state
       files.rs             Everything SDK thread and file rows
       plugins.rs           plugin discovery, processes, protocol
+      power.rs             power capabilities, shutdown privilege, restart/shut down/sleep/hibernate
       ui/theme.rs          applies core Theme to gpui-kit, ActiveTheme global
 themes/                    nebula-dark.toml, nebula-light.toml (built-ins, include_str!)
 assets/fonts/              Atkinson Hyperlegible Next and Mono, Departure Mono, OFL texts
@@ -82,7 +84,7 @@ The log is `%LOCALAPPDATA%\nebucat\logs\nebucat.log`.
 - Apply the antislop skills (`antislop`, `antislop-ui`, `antislop-code`) in "during" mode while writing UI.
 - Run the antislop Delivery Gate before handing off any UI work, and report PASS/FAIL per line with evidence.
 - No em dashes in UI copy. Use the exact strings from `DESIGN.md` and the plan.
-- Result rows use only real shell icons for apps and files. Do not use the bundled Lucide glyphs in rows.
+- Result rows use only real shell icons for apps and files. Do not use the bundled Lucide glyphs in rows. Power rows, which have no shell icon, use the pixel glyphs in `crates/nebucat/src/pixel.rs`.
 
 ## Comment rules
 
@@ -98,6 +100,7 @@ The log is `%LOCALAPPDATA%\nebucat\logs\nebucat.log`.
 - **Everything thread** (`files.rs`). One thread owns `Everything64.dll` because the SDK is not thread-safe. All queries go through it.
 - **Command reader threads** (`command.rs`). Two per running command (stdout, stderr) append into a shared buffer that the UI polls every 50 ms. The child runs in a Job Object with kill-on-close, so cancel and timeout kill the whole tree.
 - **Plugin child processes** (`plugins.rs`). One long-lived process per plugin, spawned lazily, speaking newline-delimited JSON on stdin/stdout.
+- **Power thread** (`power.rs`). One short-lived thread per confirmed power action, because `SetSuspendState` blocks until the PC wakes. It replies once over `async_channel`.
 
 Cross-thread results reach the gpui side through `async_channel`. Never call gpui APIs off the main thread.
 

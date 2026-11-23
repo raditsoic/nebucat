@@ -100,10 +100,11 @@ What you type decides the mode:
 | Empty | Recently launched apps. | |
 | `>` then a command | Command. Runs it in the configured shell and shows the output. | `>dir C:\` |
 | `/` then a search | Files, through Everything. Everything search syntax works. | `/ext:pdf invoice` |
+| `!` then an option | Power options: Restart, Shut down, Sleep, Hibernate. Empty `!` lists all four. | `!sleep` |
 | Plugin keyword, a space, then text | Plugin. Sends the text to that plugin. | `hi cat` |
 | Arithmetic | Calculator row above app results. `Enter` copies the result. | `7/2*3` gives `= 10.5` |
 
-Each row shows its source on the right (`App`, `Command`, `File`, `Calc`, `Web`, or the plugin name) and, for the first nine actionable rows, a `Ctrl 1` to `Ctrl 9` hint.
+Each row shows its source on the right (`App`, `Command`, `File`, `Calc`, `Web`, `System`, or the plugin name) and, for the first nine actionable rows, a `Ctrl 1` to `Ctrl 9` hint.
 
 The calculator accepts `+ - * / % ^`, parentheses, unary minus and decimals with `.`. `^` binds tightest and is right-associative, so `2^3^2` is `512`. Input needs at least one digit and one binary operator; a bare number stays an app search.
 
@@ -120,7 +121,7 @@ The web row appears only when `[web] enabled = true` and neither an app nor the 
 | `Ctrl+Enter` | Secondary action. Command row or output panel: open the command in a new Windows Terminal tab (`cmd /k`). File row: open Explorer with the file selected. Other rows: same as `Enter`. |
 | `Ctrl+Shift+Enter` | App row: run as administrator (UAC prompt). |
 | `Ctrl+1` ... `Ctrl+9` | Activate the Nth actionable row. Ignored while command output is shown. |
-| `Esc` | Command running: cancel it. Output shown: close it and keep the query. Otherwise: hide the launcher. |
+| `Esc` | Command running: cancel it. Output shown: close it and keep the query. Power confirmation shown: back to the list. Otherwise: hide the launcher. |
 | `Ctrl+Shift+C` | Copy the selected row's value: app name, command text, file path, URL, or calculator result. With output shown: copy the whole output. |
 | `Ctrl+R` | Rebuild the app index. |
 | Mouse click on a row | Activate that row. |
@@ -134,6 +135,7 @@ What `Enter` does per source:
 | File | Open it with its default app, hide. |
 | Calc | Copy the result to the clipboard, hide. |
 | Web | Open the search URL in the default browser, hide. |
+| System | Ask `<Title> now?`. A second `Enter` hides the launcher and runs it. On failure the launcher reopens with `Couldn't <verb> (error <code>).` |
 | Plugin | The item's action: open a URL or path, copy text, run a command, or call back into the plugin. |
 
 ### Commands
@@ -150,6 +152,15 @@ What `Enter` does per source:
 ### Files
 
 `/` searches go to Everything after a 120 ms pause in typing. Rows show the file name and its parent folder. If Everything is not running, the launcher tells you to start it (or install it with `winget install voidtools.Everything`). If `Everything64.dll` is not next to `nebucat.exe`, the launcher says the DLL is missing.
+
+### Power options
+
+`!` lists Restart, Shut down, Sleep and Hibernate. Each needs a second `Enter`; `Esc` or typing cancels. Aliases match too: `reboot`, `shutdown`, `power off`, `turn off`, `suspend`, `standby`.
+
+- Restart and Shut down never force apps closed, so an app with unsaved work can stop them, like the Start menu. Shut down uses Fast Startup when it is on, and a full shutdown otherwise.
+- Sleep on a Modern Standby PC (`powercfg /a` lists `Standby (S0 Low Power Idle)`) turns the display off, which is how the Start menu enters standby there.
+- When hibernation is off, the Hibernate row is replaced by `Hibernate is off. Turn it on with powercfg /hibernate on in an admin terminal.` The list rechecks on every keystroke, so the change shows without a restart.
+- `[system] enabled = false` turns `!` off; it then searches apps like any other text.
 
 ### App index
 
@@ -178,6 +189,7 @@ Saved changes apply without a restart. If the file fails to parse, nebucat keeps
 | `[web] enabled` | `false` | `true` adds a web search row when no app or calculator result matches. |
 | `[web] url` | `"https://www.google.com/search?q={query}"` | Search URL. `{query}` is replaced with the URL-encoded query (spaces become `+`). |
 | `[files] max_results` | `8` | File rows shown for `/` searches. |
+| `[system] enabled` | `true` | `true` lets `!` open power options. `false` makes `!` plain app search. |
 
 If the hotkey string is invalid, a `Hotkey` banner shows the parse error. If another app already holds the hotkey, the banner reads `<hotkey> is taken by another app. Change hotkey in config.toml.`
 
@@ -199,6 +211,9 @@ url = "https://www.google.com/search?q={query}"
 
 [files]
 max_results = 8
+
+[system]
+enabled = true
 ```
 
 ## Themes

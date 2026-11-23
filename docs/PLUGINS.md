@@ -33,7 +33,7 @@ All four fields are required. Unknown keys are an error.
 
 ### Keyword rules
 
-- The keyword must not be empty, must not contain whitespace, and must not start with `>` or `/`. Those prefixes belong to command mode and file search.
+- The keyword must not be empty, must not contain whitespace, and must not start with `>`, `/` or `!`. Those prefixes belong to command mode, file search and power options.
 - Keywords must be unique. Folders are processed in name order, and the first folder that claims a keyword keeps it.
 
 A rejected manifest does not load. nebucat shows a banner labeled `Plugin` with one of these messages, where `<dir>` is the plugin folder name:
@@ -42,7 +42,7 @@ A rejected manifest does not load. nebucat shows a banner labeled `Plugin` with 
 |---|---|
 | `plugin.toml` can't be read | `Plugin <dir>: <OS error>` |
 | Invalid TOML, missing or unknown field | `Plugin <dir>: line <n>: <parser message>`, or `Plugin <dir>: <parser message>` when the parser reports no position |
-| Keyword empty, has whitespace, or starts with `>` or `/` | `Plugin <dir>: keyword "<k>" not allowed` |
+| Keyword empty, has whitespace, or starts with `>`, `/` or `!` | `Plugin <dir>: keyword "<k>" not allowed` |
 | Keyword already taken | `Plugin <dir>: keyword "<k>" already used by <other dir>` |
 
 The banner stays until the next scan that no longer finds the problem.
